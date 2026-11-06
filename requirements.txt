@@ -1,0 +1,10 @@
+requests>=2.31
+pillow>=10.0
+pystray>=0.19
+pycryptodome>=3.20
+curl_cffi>=0.7
+libtorrent>=2.0
+
+# Dipendenze opzionali per i siti protetti:
+# cloudscraper
+# browser_cookie3

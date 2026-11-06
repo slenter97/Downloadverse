@@ -1,0 +1,391 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="DOWNLOADVERSE"
+           Manufacturer="Guglianza e OpenCode"
+           Version="$(var.Version)"
+           UpgradeCode="940DF48B-79B1-42F1-AC6D-8C3B35DA063E"
+           Scope="perMachine"
+           Language="1040"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="Una versione più recente di DOWNLOADVERSE è già installata." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon" SourceFile="assets\downloadverse.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+    <Property Id="ErrorDialog" Value="ErrorDlg" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <Property Id="DESKTOP_SHORTCUT" Value="1" Secure="yes" />
+    <Property Id="STARTMENU_SHORTCUT" Value="1" Secure="yes" />
+    <Property Id="STARTUP_APP" Value="1" Secure="yes" />
+
+    <Feature Id="MainFeature"
+             Title="DOWNLOADVERSE"
+             Description="Applicazione DOWNLOADVERSE e file necessari."
+             Level="1" AllowAbsent="no" AllowAdvertise="no">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="DesktopShortcutComponent" />
+      <ComponentRef Id="StartMenuShortcutComponent" />
+      <ComponentRef Id="StartupShortcutComponent" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="DOWNLOADVERSE">
+        <Component Id="MainExecutable"
+                   Guid="4CFAB089-DE80-4E96-9E8D-C76A541CFFFA">
+          <File Id="DownloadverseExe"
+                Source="dist\DOWNLOADVERSE.exe" />
+          <RegistryValue Root="HKLM" Key="Software\DOWNLOADVERSE"
+                         Name="InstallDir" Type="string" Value="[INSTALLFOLDER]"
+                         KeyPath="yes" />
+          <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER"
+                        On="uninstall" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcutComponent"
+                 Guid="0DAD80EC-9D2A-40A9-A97C-1CEEB1636A63"
+                 Condition="DESKTOP_SHORTCUT = &quot;1&quot;">
+        <Shortcut Id="DesktopShortcut"
+                  Name="DOWNLOADVERSE"
+                  Description="Avvia DOWNLOADVERSE"
+                  Target="[INSTALLFOLDER]DOWNLOADVERSE.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon" />
+        <RegistryValue Root="HKCU" Key="Software\DOWNLOADVERSE"
+                       Name="DesktopShortcut" Type="integer" Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="DOWNLOADVERSE">
+        <Component Id="StartMenuShortcutComponent"
+                   Guid="78C58E3E-680F-49DE-8A58-76461E753768"
+                   Condition="STARTMENU_SHORTCUT = &quot;1&quot;">
+          <Shortcut Id="StartMenuShortcut"
+                    Name="DOWNLOADVERSE"
+                    Description="Avvia DOWNLOADVERSE"
+                    Target="[INSTALLFOLDER]DOWNLOADVERSE.exe"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon" />
+          <RemoveFolder Id="RemoveApplicationProgramsFolder"
+                        Directory="ApplicationProgramsFolder"
+                        On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\DOWNLOADVERSE"
+                         Name="StartMenuShortcut" Type="integer" Value="1"
+                         KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="StartupFolder">
+      <Component Id="StartupShortcutComponent"
+                 Guid="BA91A983-EA8B-4392-92BC-EDC2D5F33BDD"
+                 Condition="STARTUP_APP = &quot;1&quot;">
+        <Shortcut Id="StartupShortcut"
+                  Name="DOWNLOADVERSE"
+                  Description="Avvia DOWNLOADVERSE all'avvio di Windows"
+                  Target="[INSTALLFOLDER]DOWNLOADVERSE.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon" />
+        <RegistryValue Root="HKCU" Key="Software\DOWNLOADVERSE"
+                       Name="StartupShortcut" Type="integer" Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Binary Id="WixUI_Bmp_Banner" SourceFile="assets\setup\banner.bmp" />
+    <Binary Id="WixUI_Bmp_Dialog" SourceFile="assets\setup\dialog.bmp" />
+    <Binary Id="WixUI_Bmp_New" SourceFile="assets\setup\new.bmp" />
+    <Binary Id="WixUI_Bmp_Up" SourceFile="assets\setup\up.bmp" />
+    <Binary Id="WixUI_Ico_Info" SourceFile="assets\setup\info.ico" />
+    <Binary Id="WixUI_Ico_Exclam" SourceFile="assets\setup\exclam.ico" />
+
+    <UI>
+      <Dialog Id="PrepareDlg" X="50" Y="50" Width="370" Height="270" Modeless="yes" Title="Installazione di [ProductName]">
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" TabSkip="no" Default="yes" Cancel="yes">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" Text="WixUI_Bmp_Dialog" Disabled="yes" TabSkip="no" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="60" Text="{\WixUI_Font_Bigger}Installazione guidata di [ProductName]" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="135" Y="70" Width="220" Height="20" Text="Attendere. È in corso la preparazione dell'Installazione guidata." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="&amp;Avanti" Disabled="yes" TabSkip="yes" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="In&amp;dietro" Disabled="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="ActionData" Type="Text" X="135" Y="125" Width="220" Height="30" Transparent="yes" NoPrefix="yes" TabSkip="yes">
+          <Subscribe Event="ActionData" Attribute="Text" />
+        </Control>
+        <Control Id="ActionText" Type="Text" X="135" Y="100" Width="220" Height="20" Transparent="yes" NoPrefix="yes" TabSkip="yes">
+          <Subscribe Event="ActionText" Attribute="Text" />
+        </Control>
+      </Dialog>
+
+      <Dialog Id="InstallDirDlg" X="50" Y="50" Width="370" Height="270" Title="Installazione di [ProductName]">
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="&amp;Avanti" TabSkip="no" Default="yes">
+          <Publish Event="SetTargetPath" Value="[WIXUI_INSTALLDIR]" />
+          <Publish Event="NewDialog" Value="ShortcutsDlg" />
+        </Control>
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="In&amp;dietro" Disabled="yes" TabSkip="no" />
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" TabSkip="no" Cancel="yes">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Text="WixUI_Bmp_Banner" Disabled="yes" TabSkip="no" />
+        <Control Id="Folder" Type="PathEdit" X="20" Y="100" Width="320" Height="18" Indirect="yes" Property="WIXUI_INSTALLDIR" TabSkip="no" />
+        <Control Id="ChangeFolder" Type="PushButton" X="20" Y="120" Width="56" Height="17" Text="&amp;Cambia..." TabSkip="no">
+          <Publish Property="_BrowseProperty" Value="[WIXUI_INSTALLDIR]" />
+          <Publish Event="SpawnDialog" Value="BrowseDlg" />
+        </Control>
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Text="{\WixUI_Font_Title}Cartella di installazione" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Text="Scegliere la cartella in cui installare [ProductName]." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="FolderLabel" Type="Text" X="20" Y="60" Width="300" Height="30" Text="Il programma verrà installato nella cartella seguente:" NoPrefix="yes" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="ShortcutsDlg" X="50" Y="50" Width="370" Height="270" Title="Installazione di [ProductName]">
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="&amp;Avanti" TabSkip="no" Default="yes">
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" />
+        </Control>
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="In&amp;dietro" TabSkip="no">
+          <Publish Event="NewDialog" Value="InstallDirDlg" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" TabSkip="no" Cancel="yes">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Text="WixUI_Bmp_Banner" Disabled="yes" TabSkip="no" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Text="{\WixUI_Font_Title}Scorciatoie e avvio automatico" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Text="Selezionare le opzioni che si desidera attivare." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="DesktopCheckBox" Type="CheckBox" X="25" Y="80" Width="320" Height="17" Text="Crea un collegamento sul &amp;desktop" Property="DESKTOP_SHORTCUT" CheckBoxValue="1" TabSkip="no" />
+        <Control Id="StartMenuCheckBox" Type="CheckBox" X="25" Y="105" Width="320" Height="17" Text="Crea un collegamento nel menu &amp;Start" Property="STARTMENU_SHORTCUT" CheckBoxValue="1" TabSkip="no" />
+        <Control Id="StartupCheckBox" Type="CheckBox" X="25" Y="130" Width="320" Height="17" Text="Avvia [ProductName] all'avvio di &amp;Windows" Property="STARTUP_APP" CheckBoxValue="1" TabSkip="no" />
+      </Dialog>
+
+      <Dialog Id="VerifyReadyDlg" X="50" Y="50" Width="370" Height="270" TrackDiskSpace="yes" Title="Installazione di [ProductName]">
+        <Control Id="Install" Type="PushButton" X="212" Y="243" Width="80" Height="17" Text="&amp;Installa" Hidden="yes" ElevationShield="yes" ShowCondition="NOT Installed" DefaultCondition="NOT Installed" TabSkip="no">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Repair" Type="PushButton" X="212" Y="243" Width="80" Height="17" Text="Ri&amp;para" Hidden="yes" ShowCondition="WixUI_InstallMode = &quot;Repair&quot;" DefaultCondition="WixUI_InstallMode = &quot;Repair&quot;" TabSkip="no">
+          <Publish Event="ReinstallMode" Value="ecmus" />
+          <Publish Event="Reinstall" Value="All" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Remove" Type="PushButton" X="212" Y="243" Width="80" Height="17" Text="&amp;Rimuovi" Hidden="yes" ElevationShield="yes" ShowCondition="WixUI_InstallMode = &quot;Remove&quot;" TabSkip="no">
+          <Publish Event="Remove" Value="All" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" TabSkip="no" Cancel="yes">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="Back" Type="PushButton" X="156" Y="243" Width="56" Height="17" Text="In&amp;dietro" TabSkip="no">
+          <Publish Condition="NOT Installed" Event="NewDialog" Value="ShortcutsDlg" />
+          <Publish Condition="Installed" Event="NewDialog" Value="MaintenanceDlg" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Text="WixUI_Bmp_Banner" Disabled="yes" TabSkip="no" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="InstallTitle" Type="Text" X="15" Y="15" Width="300" Height="15" Text="{\WixUI_Font_Title}Inizio installazione di [ProductName]" Hidden="yes" Transparent="yes" NoPrefix="yes" ShowCondition="NOT Installed" TabSkip="yes" />
+        <Control Id="InstallText" Type="Text" X="25" Y="70" Width="320" Height="80" Text="Fare clic su Installa per avviare l'installazione. Fare clic su Indietro per rivedere o modificare le impostazioni di installazione." Hidden="yes" ShowCondition="NOT Installed" TabSkip="yes" />
+        <Control Id="RepairTitle" Type="Text" X="15" Y="15" Width="300" Height="15" Text="{\WixUI_Font_Title}Inizio riparazione di [ProductName]" Hidden="yes" Transparent="yes" NoPrefix="yes" ShowCondition="WixUI_InstallMode = &quot;Repair&quot;" TabSkip="yes" />
+        <Control Id="RepairText" Type="Text" X="25" Y="70" Width="320" Height="80" Text="Fare clic su Ripara per ripristinare i file e le impostazioni di [ProductName]." Hidden="yes" ShowCondition="WixUI_InstallMode = &quot;Repair&quot;" TabSkip="yes" />
+        <Control Id="RemoveTitle" Type="Text" X="15" Y="15" Width="300" Height="15" Text="{\WixUI_Font_Title}Inizio rimozione di [ProductName]" Hidden="yes" Transparent="yes" NoPrefix="yes" ShowCondition="WixUI_InstallMode = &quot;Remove&quot;" TabSkip="yes" />
+        <Control Id="RemoveText" Type="Text" X="25" Y="70" Width="320" Height="80" Text="Fare clic su Rimuovi per disinstallare [ProductName] dal computer." Hidden="yes" ShowCondition="WixUI_InstallMode = &quot;Remove&quot;" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="MaintenanceDlg" X="50" Y="50" Width="370" Height="270" Title="Installazione di [ProductName]">
+        <Control Id="RepairButton" Type="PushButton" X="40" Y="80" Width="86" Height="17" Text="Ri&amp;para" Default="yes" TabSkip="no">
+          <Publish Property="WixUI_InstallMode" Value="Repair" />
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" />
+        </Control>
+        <Control Id="RemoveButton" Type="PushButton" X="40" Y="120" Width="86" Height="17" Text="&amp;Rimuovi" TabSkip="no">
+          <Publish Property="WixUI_InstallMode" Value="Remove" />
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" />
+        </Control>
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="In&amp;dietro" Disabled="yes" TabSkip="no" />
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="&amp;Avanti" Disabled="yes" TabSkip="no" />
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" TabSkip="no" Cancel="yes">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Text="WixUI_Bmp_Banner" Disabled="yes" TabSkip="no" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Text="{\WixUI_Font_Title}Manutenzione di [ProductName]" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="340" Height="20" Text="Selezionare l'operazione che si desidera eseguire." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="RepairText" Type="Text" X="136" Y="80" Width="210" Height="34" Text="Ripristina i file e le impostazioni di [ProductName]." NoPrefix="yes" TabSkip="yes" />
+        <Control Id="RemoveText" Type="Text" X="136" Y="120" Width="210" Height="34" Text="Rimuove [ProductName] dal computer." NoPrefix="yes" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="ProgressDlg" X="50" Y="50" Width="370" Height="270" Modeless="yes" Title="Installazione di [ProductName]">
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" TabSkip="no" Default="yes" Cancel="yes">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Text="WixUI_Bmp_Banner" Disabled="yes" TabSkip="no" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="In&amp;dietro" Disabled="yes" TabSkip="no" />
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="&amp;Avanti" Disabled="yes" TabSkip="no" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="ActionText" Type="Text" X="70" Y="100" Width="285" Height="10" TabSkip="yes">
+          <Subscribe Event="ActionText" Attribute="Text" />
+        </Control>
+        <Control Id="TextInstalling" Type="Text" X="20" Y="65" Width="330" Height="35" Text="Attendere. È in corso l'installazione di [ProductName]." Hidden="yes" NoPrefix="yes" ShowCondition="NOT Installed" TabSkip="yes" />
+        <Control Id="TitleInstalling" Type="Text" X="20" Y="15" Width="330" Height="15" Text="{\WixUI_Font_Title}Installazione di [ProductName]" Hidden="yes" Transparent="yes" NoPrefix="yes" ShowCondition="NOT Installed" TabSkip="yes" />
+        <Control Id="TextRepairing" Type="Text" X="20" Y="65" Width="330" Height="35" Text="Attendere. È in corso la riparazione di [ProductName]." Hidden="yes" NoPrefix="yes" ShowCondition="WixUI_InstallMode = &quot;Repair&quot;" TabSkip="yes" />
+        <Control Id="TitleRepairing" Type="Text" X="20" Y="15" Width="330" Height="15" Text="{\WixUI_Font_Title}Riparazione di [ProductName]" Hidden="yes" Transparent="yes" NoPrefix="yes" ShowCondition="WixUI_InstallMode = &quot;Repair&quot;" TabSkip="yes" />
+        <Control Id="TextRemoving" Type="Text" X="20" Y="65" Width="330" Height="35" Text="Attendere. È in corso la rimozione di [ProductName]." Hidden="yes" NoPrefix="yes" ShowCondition="WixUI_InstallMode = &quot;Remove&quot;" TabSkip="yes" />
+        <Control Id="TitleRemoving" Type="Text" X="20" Y="15" Width="330" Height="15" Text="{\WixUI_Font_Title}Rimozione di [ProductName]" Hidden="yes" Transparent="yes" NoPrefix="yes" ShowCondition="WixUI_InstallMode = &quot;Remove&quot;" TabSkip="yes" />
+        <Control Id="ProgressBar" Type="ProgressBar" X="20" Y="115" Width="330" Height="10" Text="Stato" Disabled="yes" ProgressBlocks="yes" TabSkip="yes">
+          <Subscribe Event="SetProgress" Attribute="Progress" />
+        </Control>
+        <Control Id="StatusLabel" Type="Text" X="20" Y="100" Width="50" Height="10" Text="Stato:" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="ExitDialog" X="50" Y="50" Width="370" Height="270" Title="Installazione di [ProductName]">
+        <Control Id="Finish" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="&amp;Fine" TabSkip="no" Default="yes" Cancel="yes">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" Disabled="yes" TabSkip="no" />
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" Text="WixUI_Bmp_Dialog" Disabled="yes" TabSkip="no" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="In&amp;dietro" Disabled="yes" TabSkip="no" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="60" Text="{\WixUI_Font_Bigger}Installazione guidata di [ProductName] completata" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="135" Y="70" Width="220" Height="40" Text="Fare clic sul pulsante Fine per uscire dall'Installazione guidata." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="UserExit" X="50" Y="50" Width="370" Height="270" Title="Installazione di [ProductName]">
+        <Control Id="Finish" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="&amp;Fine" TabSkip="no" Default="yes" Cancel="yes">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" Disabled="yes" TabSkip="no" />
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" Text="WixUI_Bmp_Dialog" Disabled="yes" TabSkip="no" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="In&amp;dietro" Disabled="yes" TabSkip="no" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="60" Text="{\WixUI_Font_Bigger}Installazione guidata di [ProductName] interrotta" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="135" Y="80" Width="220" Height="80" Text="L'installazione di [ProductName] è stata interrotta. Il sistema non è stato modificato. Fare clic sul pulsante Fine per uscire dall'Installazione guidata." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="FatalError" X="50" Y="50" Width="370" Height="270" Title="Installazione di [ProductName]">
+        <Control Id="Finish" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="&amp;Fine" TabSkip="no" Default="yes" Cancel="yes">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" Disabled="yes" TabSkip="no" />
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" Text="WixUI_Bmp_Dialog" Disabled="yes" TabSkip="no" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="In&amp;dietro" Disabled="yes" TabSkip="no" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="60" Text="{\WixUI_Font_Bigger}Installazione guidata di [ProductName] terminata prima del completamento" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="135" Y="70" Width="220" Height="80" Text="L'Installazione guidata di [ProductName] è terminata prima del completamento a causa di un errore. Il sistema non è stato modificato. Per installare il programma in un secondo momento, eseguire di nuovo l'Installazione guidata. Fare clic sul pulsante Fine per uscire." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="CancelDlg" X="50" Y="50" Width="260" Height="85" Title="Installazione di [ProductName]">
+        <Control Id="No" Type="PushButton" X="132" Y="57" Width="56" Height="17" Text="&amp;No" TabSkip="no" Default="yes" Cancel="yes">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Yes" Type="PushButton" X="72" Y="57" Width="56" Height="17" Text="&amp;Sì" TabSkip="no">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Text" Type="Text" X="48" Y="15" Width="194" Height="30" Text="Annullare l'installazione di [ProductName]?" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Icon" Type="Icon" X="15" Y="15" Width="24" Height="24" Text="WixUI_Ico_Info" Disabled="yes" FixedSize="yes" IconSize="32" ToolTip="Icona informazioni" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="ErrorDlg" X="50" Y="50" Width="270" Height="105" ErrorDialog="yes" Title="Installazione di [ProductName]">
+        <Control Id="ErrorText" Type="Text" X="48" Y="15" Width="205" Height="60" Text="Testo informativo" NoPrefix="yes" TabSkip="no" />
+        <Control Id="Y" Type="PushButton" X="100" Y="80" Width="56" Height="17" Text="&amp;Sì" TabSkip="yes">
+          <Publish Event="EndDialog" Value="ErrorYes" />
+        </Control>
+        <Control Id="A" Type="PushButton" X="100" Y="80" Width="56" Height="17" Text="Annulla" TabSkip="yes">
+          <Publish Event="EndDialog" Value="ErrorAbort" />
+        </Control>
+        <Control Id="C" Type="PushButton" X="100" Y="80" Width="56" Height="17" Text="Annulla" TabSkip="yes">
+          <Publish Event="EndDialog" Value="ErrorCancel" />
+        </Control>
+        <Control Id="I" Type="PushButton" X="100" Y="80" Width="56" Height="17" Text="&amp;Ignora" TabSkip="yes">
+          <Publish Event="EndDialog" Value="ErrorIgnore" />
+        </Control>
+        <Control Id="N" Type="PushButton" X="100" Y="80" Width="56" Height="17" Text="&amp;No" TabSkip="yes">
+          <Publish Event="EndDialog" Value="ErrorNo" />
+        </Control>
+        <Control Id="O" Type="PushButton" X="100" Y="80" Width="56" Height="17" Text="OK" TabSkip="yes">
+          <Publish Event="EndDialog" Value="ErrorOk" />
+        </Control>
+        <Control Id="R" Type="PushButton" X="100" Y="80" Width="56" Height="17" Text="&amp;Riprova" TabSkip="yes">
+          <Publish Event="EndDialog" Value="ErrorRetry" />
+        </Control>
+        <Control Id="ErrorIcon" Type="Icon" X="15" Y="15" Width="24" Height="24" Text="WixUI_Ico_Info" Disabled="yes" FixedSize="yes" IconSize="32" ToolTip="Icona informazioni" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="FilesInUse" X="50" Y="50" Width="370" Height="270" KeepModeless="yes" Title="Installazione di [ProductName]">
+        <Control Id="Retry" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="&amp;Riprova" TabSkip="no" Default="yes" Cancel="yes">
+          <Publish Event="EndDialog" Value="Retry" />
+        </Control>
+        <Control Id="Ignore" Type="PushButton" X="235" Y="243" Width="56" Height="17" Text="&amp;Ignora" TabSkip="no">
+          <Publish Event="EndDialog" Value="Ignore" />
+        </Control>
+        <Control Id="Exit" Type="PushButton" X="166" Y="243" Width="56" Height="17" Text="E&amp;sci" TabSkip="no">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Text="WixUI_Bmp_Banner" Disabled="yes" TabSkip="no" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Text="{\WixUI_Font_Title}File in uso" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="20" Y="23" Width="340" Height="20" Text="Alcuni file che richiedono l'aggiornamento sono attualmente in uso." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Text" Type="Text" X="20" Y="55" Width="330" Height="30" Text="Le applicazioni seguenti stanno utilizzando file che devono essere aggiornati da questa installazione. Chiudere le applicazioni, quindi fare clic su Riprova per continuare l'installazione." TabSkip="yes" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="List" Type="ListBox" X="20" Y="87" Width="330" Height="130" Sunken="yes" Property="FileInUseProcess" TabSkip="yes" />
+      </Dialog>
+
+      <Dialog Id="BrowseDlg" X="50" Y="50" Width="370" Height="270" Title="Installazione di [ProductName]">
+        <Control Id="PathEdit" Type="PathEdit" X="25" Y="202" Width="320" Height="18" Indirect="yes" Property="_BrowseProperty" TabSkip="no" />
+        <Control Id="OK" Type="PushButton" X="240" Y="243" Width="56" Height="17" Text="OK" TabSkip="no" Default="yes">
+          <Publish Event="SetTargetPath" Value="[_BrowseProperty]" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Text="Annulla" TabSkip="no" Cancel="yes">
+          <Publish Event="Reset" Value="0" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="ComboLabel" Type="Text" X="25" Y="58" Width="44" Height="10" Text="&amp;Cerca in:" TabSkip="no" />
+        <Control Id="DirectoryCombo" Type="DirectoryCombo" X="70" Y="55" Width="220" Height="80" Indirect="yes" Fixed="yes" Remote="yes" Property="_BrowseProperty" TabSkip="no">
+          <Subscribe Event="IgnoreChange" Attribute="IgnoreChange" />
+        </Control>
+        <Control Id="WixUI_Bmp_Up" Type="PushButton" X="298" Y="55" Width="19" Height="19" Text="WixUI_Bmp_Up" Icon="yes" FixedSize="yes" IconSize="16" ToolTip="Livello superiore" TabSkip="no">
+          <Publish Event="DirectoryListUp" Value="0" />
+        </Control>
+        <Control Id="NewFolder" Type="PushButton" X="325" Y="55" Width="19" Height="19" Text="WixUI_Bmp_New" Icon="yes" FixedSize="yes" IconSize="16" ToolTip="Crea una nuova cartella" TabSkip="no">
+          <Publish Event="DirectoryListNew" Value="0" />
+        </Control>
+        <Control Id="DirectoryList" Type="DirectoryList" X="25" Y="83" Width="320" Height="98" Indirect="yes" Sunken="yes" Property="_BrowseProperty" TabSkip="no" />
+        <Control Id="PathLabel" Type="Text" X="25" Y="190" Width="320" Height="10" Text="&amp;Nome cartella:" TabSkip="no" />
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Text="WixUI_Bmp_Banner" Disabled="yes" TabSkip="no" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Text="{\WixUI_Font_Title}Cambia cartella" Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Text="Selezionare la cartella di destinazione." Transparent="yes" NoPrefix="yes" TabSkip="yes" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" Disabled="yes" TabSkip="yes" />
+      </Dialog>
+
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+
+      <InstallUISequence>
+        <Show Dialog="FatalError" OnExit="error" />
+        <Show Dialog="UserExit" OnExit="cancel" />
+        <Show Dialog="ExitDialog" OnExit="success" />
+        <Show Dialog="PrepareDlg" Before="AppSearch" />
+        <Show Dialog="InstallDirDlg" After="CostFinalize" Condition="NOT Installed" />
+        <Show Dialog="MaintenanceDlg" After="InstallDirDlg" Condition="Installed" />
+        <Show Dialog="ProgressDlg" Before="ExecuteAction" />
+      </InstallUISequence>
+
+      <AdminUISequence>
+        <Show Dialog="FatalError" OnExit="error" />
+        <Show Dialog="UserExit" OnExit="cancel" />
+        <Show Dialog="ExitDialog" OnExit="success" />
+      </AdminUISequence>
+    </UI>
+  </Package>
+</Wix>
