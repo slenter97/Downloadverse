@@ -9,7 +9,7 @@ Dipendenze: solo libreria standard di Python. La logica di trasferimento è
 indipendente dalla GUI e comunica gli aggiornamenti tramite queue.Queue.
 """
 
-APP_VERSION = "0.9.6"
+APP_VERSION = "0.9.8"
 
 import email.message
 import base64
@@ -1110,8 +1110,9 @@ def human_size(value):
     return f"{amount:.1f} TB"
 
 
-UPDATE_FOLDER_ID = "1wZDN2i-xKv-fO4WQz9XO64I6bUZIEKzf"
-UPDATE_FOLDER_URL = f"https://drive.google.com/drive/folders/{UPDATE_FOLDER_ID}"
+UPDATE_REPO = "slenter97/Downloadverse"
+UPDATE_RELEASES_URL = f"https://github.com/{UPDATE_REPO}/releases"
+UPDATE_RELEASES_API = f"https://api.github.com/repos/{UPDATE_REPO}/releases"
 _UPDATE_HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                    "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1130,120 +1131,85 @@ def _version_tuple(value):
     return tuple(parts)
 
 
-def _parse_drive_msi_entries(page, folder_id=UPDATE_FOLDER_ID):
-    """Estrae coppie id/nome dei file .msi da una pagina pubblica Drive."""
-    entries = {}
-    patterns = (
-        r'href="[^"]*?/file/d/([A-Za-z0-9_-]{20,})[^"]*"[^>]*>(.*?)</a>',
-        r'href="[^"]*?[?&]id=([A-Za-z0-9_-]{20,})[^"]*"[^>]*>(.*?)</a>',
-    )
-    for pattern in patterns:
-        for match in re.finditer(pattern, page or "", re.I | re.S):
-            file_id, label_html = match.groups()
-            label = html_module.unescape(re.sub(r"<[^>]+>", " ", label_html))
-            label = re.sub(r"\s+", " ", label).strip()
-            if file_id != folder_id and label.lower().endswith(".msi"):
-                entries[file_id] = label
-    if entries:
-        return entries
-    # Fallback per le pagine Drive che espongono i metadati in JavaScript.
-    names = []
-    for match in re.finditer(r'(?i)([^"\\<>]{0,220}?\.msi)', page or ""):
-        name = html_module.unescape(re.sub(r"<[^>]+>", " ", match.group(1))).strip()
-        name = os.path.basename(name.replace("\\", "/"))
-        if name and name.lower().endswith(".msi"):
-            names.append(name)
-    names = list(dict.fromkeys(names))
-    ids = re.findall(r'(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{28,44})(?![A-Za-z0-9_-])',
-                     page or "")
-    ids = list(dict.fromkeys(item for item in ids if item != folder_id))
-    if len(names) == 1 and ids:
-        return {ids[0]: names[0]}
-    return {}
+def _github_update_headers(accept="application/vnd.github+json"):
+    headers = dict(_UPDATE_HEADERS)
+    headers["Accept"] = accept
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
 def _find_latest_update():
-    """Cerca nella cartella Drive una versione .msi più recente."""
-    urls = (
-        f"https://drive.google.com/embeddedfolderview?id={UPDATE_FOLDER_ID}&hl=en#list",
-        f"{UPDATE_FOLDER_URL}?hl=en",
-    )
-    entries = {}
-    reachable = False
-    last_error = None
-    for url in urls:
-        try:
-            response = requests.get(url, headers=_UPDATE_HEADERS, timeout=30)
-            response.raise_for_status()
-            reachable = True
-            entries.update(_parse_drive_msi_entries(response.text))
-        except Exception as exc:
-            last_error = exc
-    if not reachable:
-        raise UpdateError("Cartella release non raggiungibile.") from last_error
+    """Cerca nelle release GitHub l'asset .msi con la versione più alta."""
+    try:
+        response = requests.get(UPDATE_RELEASES_API,
+                                headers=_github_update_headers(),
+                                params={"per_page": 100}, timeout=30)
+        response.raise_for_status()
+        releases = response.json()
+    except Exception as exc:
+        raise UpdateError("Release GitHub non raggiungibili.") from exc
+    if not isinstance(releases, list):
+        raise UpdateError("Risposta GitHub non valida.")
     current = _version_tuple(APP_VERSION)
     latest = None
-    for file_id, name in entries.items():
-        match = re.search(r"(\d+(?:\.\d+){1,3})", name)
-        if not match:
+    for release in releases:
+        if not isinstance(release, dict):
             continue
-        version = match.group(1)
-        parsed = _version_tuple(version)
-        if parsed > current and (latest is None
-                                 or parsed > latest["version_tuple"]):
-            latest = {
-                "id": file_id,
-                "name": name,
-                "version": version,
-                "version_tuple": parsed,
-            }
+        tag = str(release.get("tag_name") or release.get("name") or "")
+        for asset in release.get("assets") or []:
+            if not isinstance(asset, dict):
+                continue
+            name = str(asset.get("name") or "")
+            if not name.lower().endswith(".msi"):
+                continue
+            match = (re.search(r"(\d+(?:\.\d+){1,3})", name)
+                     or re.search(r"(\d+(?:\.\d+){1,3})", tag))
+            if not match:
+                continue
+            version = match.group(1)
+            parsed = _version_tuple(version)
+            if parsed <= current:
+                continue
+            if latest is None or parsed > latest["version_tuple"]:
+                latest = {
+                    "id": asset.get("id"),
+                    "name": name,
+                    "version": version,
+                    "version_tuple": parsed,
+                    "url": asset.get("browser_download_url") or "",
+                    "size": asset.get("size"),
+                }
     return latest
 
 
-def _download_drive_msi(file_id, filename):
-    """Scarica un .msi pubblico da Drive e verifica che sia un MSI valido."""
+def _download_update_msi(url, filename, asset_id=None):
+    """Scarica l'asset .msi della release GitHub e ne verifica la firma."""
     target_dir = tempfile.mkdtemp(prefix="downloadverse_update_")
     safe_name = sanitize_filename(filename or "DOWNLOADVERSE-update.msi",
                                   "DOWNLOADVERSE-update.msi")
     if not safe_name.lower().endswith(".msi"):
         safe_name += ".msi"
     target = os.path.join(target_dir, safe_name)
-    session = requests.Session()
-    session.headers.update(_UPDATE_HEADERS)
-    urls = (
-        ("https://drive.usercontent.google.com/download"
-         f"?id={urllib.parse.quote(file_id)}&export=download&confirm=t"),
-        ("https://drive.google.com/uc?export=download"
-         f"&id={urllib.parse.quote(file_id)}&confirm=t"),
-    )
+    candidates = []
+    if url:
+        candidates.append(url)
+    if asset_id is not None:
+        candidates.append(
+            f"https://api.github.com/repos/{UPDATE_REPO}/releases/assets/{asset_id}")
     last_error = None
-    for url in urls:
+    for candidate in candidates:
         try:
-            response = session.get(url, timeout=60, stream=True,
-                                   allow_redirects=True)
+            response = requests.get(candidate,
+                                    headers=_github_update_headers(
+                                        "application/octet-stream"),
+                                    timeout=60, stream=True, allow_redirects=True)
             response.raise_for_status()
             content_type = str(response.headers.get("Content-Type", "")).lower()
-            if "text/html" in content_type:
-                body = response.text
+            if "text/html" in content_type or "application/json" in content_type:
                 response.close()
-                parsed = _parse_page_forms(body)
-                form = parsed.forms[0] if parsed.forms else {}
-                action = form.get("action", "")
-                inputs = form.get("inputs") or dict(parsed.inputs)
-                if not action:
-                    continue
-                post_url = urllib.parse.urljoin(url, action)
-                if str(form.get("method", "get")).lower() == "post":
-                    response = session.post(post_url, data=inputs, timeout=60,
-                                            stream=True, allow_redirects=True)
-                else:
-                    response = session.get(post_url, params=inputs, timeout=60,
-                                           stream=True, allow_redirects=True)
-                response.raise_for_status()
-                content_type = str(response.headers.get("Content-Type", "")).lower()
-                if "text/html" in content_type:
-                    response.close()
-                    continue
+                raise UpdateError("Il link GitHub non punta a un file MSI.")
             with open(target, "wb") as handle:
                 for chunk in response.iter_content(chunk_size=262144):
                     if chunk:
@@ -1263,7 +1229,6 @@ def _download_drive_msi(file_id, filename):
             except OSError:
                 pass
     raise UpdateError("Errore download aggiornamento.") from last_error
-
 
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _WINDOWS_RESERVED_NAMES = {
@@ -3730,6 +3695,8 @@ class DownloaderApp:
     MUTED = "#a8a8a8"
     ACCENT = "#e10600"
     ACCENT_HOVER = "#ff1a1a"
+    SELECT_BG = "#d4d4d4"
+    SELECT_FG = "#101010"
 
     def __init__(self, root):
         _load_tkinter()
@@ -4301,8 +4268,8 @@ class DownloaderApp:
                               ("!disabled", "#161616")],
                   foreground=[("pressed", "#ffffff"), ("active", "#ffffff"),
                               ("!disabled", "#d0d0d0")])
-        style.map("Treeview", background=[("selected", self.ACCENT)],
-                  foreground=[("selected", "#ffffff")])
+        style.map("Treeview", background=[("selected", self.SELECT_BG)],
+                  foreground=[("selected", self.SELECT_FG)])
         # Layout senza il triangolino nativo: il gruppo usa una sola icona
         # + / − personalizzata, coerente con il resto dell'interfaccia.
         try:
@@ -4322,8 +4289,8 @@ class DownloaderApp:
                             rowheight=35, borderwidth=0, relief="flat",
                             font=(APP_FONT_FAMILY, 10))
             style.map("NoArrow.Treeview",
-                      background=[("selected", self.ACCENT)],
-                      foreground=[("selected", "#ffffff")])
+                      background=[("selected", self.SELECT_BG)],
+                      foreground=[("selected", self.SELECT_FG)])
             style.configure("NoArrow.Treeview.Heading", background="#161616",
                             foreground="#d0d0d0", font=(APP_FONT_FAMILY, 9, "bold"),
                             relief="flat", padding=(9, 10))
@@ -4526,6 +4493,8 @@ class DownloaderApp:
         self.progress_overlay.bind("<Button-5>", self._overlay_wheel)
         self.tree.bind("<Configure>",
                        lambda _event: self._schedule_progress_overlay(), add="+")
+        self.tree.bind("<Configure>",
+                       lambda event: self._fit_tree_columns(event), add="+")
         self.root.after(120, self._progress_overlay_tick)
 
         self.empty_state = tk.Frame(table_wrap, bg=self.ROW)
@@ -4842,7 +4811,9 @@ class DownloaderApp:
         path = None
         error = ""
         try:
-            path = _download_drive_msi(info["id"], info["name"])
+            path = _download_update_msi(info.get("url", ""),
+                                        info.get("name", ""),
+                                        info.get("id"))
         except Exception as exc:
             logging.exception("Download aggiornamento fallito")
             error = str(exc) or exc.__class__.__name__
@@ -6116,8 +6087,8 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                                 rowheight=26, borderwidth=0, relief="flat",
                                 font=(APP_FONT_FAMILY, 9))
         browser_style.map("Browser.Treeview",
-                          background=[("selected", self.ACCENT)],
-                          foreground=[("selected", "#ffffff")])
+                          background=[("selected", self.SELECT_BG)],
+                          foreground=[("selected", self.SELECT_FG)])
         browser_style.configure("Browser.Treeview.Heading", background="#161616",
                                 foreground="#d0d0d0", font=(APP_FONT_FAMILY, 9, "bold"),
                                 relief="flat", padding=(6, 6))
@@ -7113,6 +7084,67 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
     # ------------------------------------------------------------------
     # Barra di avanzamento grafica (colonna PROGRESSO)
     # ------------------------------------------------------------------
+    def _fit_tree_columns(self, _event=None):
+        """Adatta le colonne allo spazio disponibile, mantenendo visibile STATO."""
+        tree = self.tree
+        try:
+            available = tree.winfo_width() - 4
+        except tk.TclError:
+            return
+        if available < 120:
+            return
+        desired = {
+            "#0": 280, "progress": 175, "percent": 62, "size": 105,
+            "speed": 110, "upload": 110, "peer": 72, "priority": 90,
+            "state": 255,
+        }
+        minimum = {
+            "#0": 140, "progress": 105, "percent": 58, "size": 98,
+            "speed": 96, "upload": 90, "peer": 60, "priority": 86,
+            "state": 140,
+        }
+        order = ["#0", "progress", "percent", "size", "speed", "upload",
+                 "peer", "priority", "state"]
+        optional = ["upload", "peer", "speed", "priority", "percent", "size"]
+        visible = list(order)
+        for column in optional:
+            if sum(minimum[name] for name in visible) <= available:
+                break
+            if column in visible:
+                visible.remove(column)
+        if not visible:
+            return
+        min_total = sum(minimum[name] for name in visible)
+        desired_total = sum(desired[name] for name in visible)
+        widths = {}
+        if available >= desired_total:
+            extra = available - desired_total
+            for name in visible:
+                widths[name] = desired[name]
+            for name, weight in (("#0", 0.45), ("progress", 0.25), ("state", 0.30)):
+                if name in widths:
+                    widths[name] += int(extra * weight)
+        elif available >= min_total:
+            extra = available - min_total
+            spread = max(1, desired_total - min_total)
+            for name in visible:
+                share = (desired[name] - minimum[name]) / spread
+                widths[name] = minimum[name] + int(extra * share)
+        else:
+            for name in visible:
+                widths[name] = minimum[name]
+        used = sum(widths[name] for name in visible)
+        widths[visible[-1]] += available - used
+        display = tuple(name for name in visible if name != "#0")
+        try:
+            if tuple(tree["displaycolumns"]) != display:
+                tree["displaycolumns"] = display
+            for name in visible:
+                tree.column(name, width=max(1, widths[name]), stretch=False)
+        except tk.TclError:
+            return
+        self._schedule_progress_overlay()
+
     def _tree_rows_top(self):
         """Y dell'inizio della prima riga visibile del Treeview."""
         try:
@@ -7183,7 +7215,7 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
     def _draw_progress_bar(self, canvas, iid, width, height, y, selected):
         tree = self.tree
         canvas.create_rectangle(0, y, width, y + height,
-                                fill=self.ACCENT if selected else self.ROW,
+                                fill=self.SELECT_BG if selected else self.ROW,
                                 outline="")
         try:
             percent_text = tree.set(iid, "percent")
@@ -7299,7 +7331,8 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         if column_width <= 4:
             canvas.place_forget()
             return False
-        canvas_height = max(1, height - top)
+        last_bottom = max(bbox[1] + bbox[3] for _iid, bbox in rows)
+        canvas_height = max(1, min(height, last_bottom) - top)
         current = (canvas.winfo_x(), canvas.winfo_y(),
                    canvas.winfo_width(), canvas.winfo_height())
         if current != (column_x, top, column_width, canvas_height):
@@ -7377,6 +7410,9 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         try:
             if self.tree.get_children(""):
                 state.place_forget()
+                # Forza il ridisegno dell'area prima occupata dallo stato vuoto.
+                self.tree.update_idletasks()
+                self._schedule_progress_overlay()
             else:
                 state.place(in_=self.tree, relx=0.5, rely=0.55,
                             anchor="center")
