@@ -7,13 +7,9 @@ headless della logica di download.
 
 import tkinter as tk
 
-try:
-    from PIL import ImageTk
-
-    import ui_render
-except Exception:  # Pillow opzionale: si torna al disegno su Canvas
-    ImageTk = None
-    ui_render = None
+# Pillow e il renderer vengono caricati solo quando serve disegnare il thumb.
+ImageTk = None
+ui_render = None
 
 
 class FluidScrollbar(tk.Canvas):
@@ -95,8 +91,8 @@ class FluidScrollbar(tk.Canvas):
             return
         thickness = self._thumb_width
         hover = self._hover or self._dragging
-        if ui_render is not None and ImageTk is not None:
-            photo = self._thumb_photo(thickness, length, hover)
+        photo = self._thumb_photo(thickness, length, hover)
+        if photo is not None:
             if self.orient == "vertical":
                 x = (self.winfo_width() - thickness) / 2
                 self.create_image(x, offset, anchor="nw", image=photo, tags="thumb")
@@ -126,10 +122,19 @@ class FluidScrollbar(tk.Canvas):
                                   fill=color, outline="", tags="thumb")
 
     def _thumb_photo(self, width, height, hover):
+        global ImageTk, ui_render
+        if ImageTk is None or ui_render is None:
+            try:
+                from PIL import ImageTk as _ImageTk
+
+                import ui_render as _ui_render
+            except Exception:
+                return None
+            ImageTk, ui_render = _ImageTk, _ui_render
         key = (int(round(width)), int(round(height)), bool(hover))
         photo = self._thumb_cache.get(key)
         if photo is None:
-            if len(self._thumb_cache) > 240:
+            if len(self._thumb_cache) > 60:
                 self._thumb_cache.clear()
             photo = ImageTk.PhotoImage(
                 ui_render.pill_thumb(key[0], key[1], hover))

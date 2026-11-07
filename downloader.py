@@ -9,7 +9,7 @@ Dipendenze: solo libreria standard di Python. La logica di trasferimento è
 indipendente dalla GUI e comunica gli aggiornamenti tramite queue.Queue.
 """
 
-APP_VERSION = "0.9.8"
+APP_VERSION = "0.9.9"
 
 import email.message
 import base64
@@ -36,38 +36,81 @@ import urllib.parse
 import urllib.request
 import html as html_module
 from html.parser import HTMLParser
-import requests
 from http.cookies import SimpleCookie
 
-try:
-    import pystray
-    from PIL import Image, ImageDraw
-except Exception:
-    pystray = Image = ImageDraw = None
 
-try:
-    import ui_render
-    from PIL import ImageTk
-except Exception:
-    ui_render = None
-    ImageTk = None
+class _LazyModule:
+    """Modulo caricato alla prima operazione, per ridurre la RAM all'avvio."""
 
-try:
-    from curl_cffi import requests as curl_requests
-except Exception:  # libreria opzionale, anche errori d'importazione native
-    curl_requests = None
-try:
-    import cloudscraper
-except Exception:
-    cloudscraper = None
-try:
-    import browser_cookie3
-except Exception:
-    browser_cookie3 = None
-try:
-    from Crypto.Cipher import AES as _CryptoAES
-except Exception:  # pycryptodome opzionale: serve solo per i paste PrivateBin
-    _CryptoAES = None
+    def __init__(self, name):
+        object.__setattr__(self, "_name", name)
+        object.__setattr__(self, "_module", None)
+
+    def _load(self):
+        module = object.__getattribute__(self, "_module")
+        if module is None:
+            module = importlib.import_module(object.__getattribute__(self, "_name"))
+            object.__setattr__(self, "_module", module)
+        return module
+
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+
+
+# requests (e urllib3) pesano diversi MB e servono solo quando si usa la rete.
+requests = _LazyModule("requests")
+
+# I moduli pesanti o opzionali vengono caricati solo al primo utilizzo:
+# all'avvio restano fuori dalla memoria finché non servono davvero.
+pystray = Image = ImageDraw = None
+ui_render = None
+ImageTk = None
+curl_requests = None
+cloudscraper = None
+browser_cookie3 = None
+_CryptoAES = None
+
+_OPTIONAL_MODULES = {}
+
+
+def _load_optional(name):
+    """Importa un modulo solo al primo utilizzo e ne conserva il risultato."""
+    if name in _OPTIONAL_MODULES:
+        return _OPTIONAL_MODULES[name]
+    try:
+        module = importlib.import_module(name)
+    except Exception:
+        module = None
+    _OPTIONAL_MODULES[name] = module
+    return module
+
+
+def _load_curl_cffi():
+    global curl_requests
+    if curl_requests is None:
+        curl_requests = _load_optional("curl_cffi.requests")
+    return curl_requests
+
+
+def _load_cloudscraper():
+    global cloudscraper
+    if cloudscraper is None:
+        cloudscraper = _load_optional("cloudscraper")
+    return cloudscraper
+
+
+def _load_browser_cookie3():
+    global browser_cookie3
+    if browser_cookie3 is None:
+        browser_cookie3 = _load_optional("browser_cookie3")
+    return browser_cookie3
+
+
+def _load_crypto():
+    global _CryptoAES
+    if _CryptoAES is None:
+        _CryptoAES = _load_optional("Crypto.Cipher.AES")
+    return _CryptoAES
 # Tkinter viene importato soltanto per creare la finestra: la logica della
 # coda resta importabile e testabile anche su server/headless senza Tcl/Tk.
 tk = filedialog = messagebox = ttk = None
@@ -487,13 +530,24 @@ CHUNK_SIZE = 64 * 1024
 PROGRESS_SEGMENTS = 10
 MAGNET_METADATA_TIMEOUT = 60
 
-try:
-    import libtorrent as lt
-except Exception as _libtorrent_import_error:
-    lt = None
-    LIBTORRENT_IMPORT_ERROR = str(_libtorrent_import_error)
-else:
-    LIBTORRENT_IMPORT_ERROR = ""
+lt = None
+LIBTORRENT_IMPORT_ERROR = ""
+
+
+def _load_libtorrent():
+    """Carica libtorrent solo quando si aggiunge o si gestisce un torrent."""
+    global lt, LIBTORRENT_IMPORT_ERROR
+    if lt is not None:
+        return lt
+    if LIBTORRENT_IMPORT_ERROR:
+        return None
+    try:
+        import libtorrent as _libtorrent
+    except Exception as exc:
+        LIBTORRENT_IMPORT_ERROR = str(exc)
+        return None
+    lt = _libtorrent
+    return lt
 
 # UI translations (Italian is the source language; all displayed strings use these catalogs).
 
@@ -1001,6 +1055,12 @@ FR_STRINGS.update({
      "Demande de fermeture réinitialisée.",
 })
 
+UI_STRINGS["slenter97 con DeepSeek"] = ("slenter97 with DeepSeek",
+                                        "slenter97 mit DeepSeek")
+ES_STRINGS["slenter97 con DeepSeek"] = "slenter97 con DeepSeek"
+FR_STRINGS["slenter97 con DeepSeek"] = "slenter97 avec DeepSeek"
+
+
 def translate_ui(text, language):
     if language == "it": return text
     pair = UI_STRINGS.get(text)
@@ -1349,10 +1409,16 @@ def make_http_session(url, config_path=None, backend=None):
     session = None
     for choice in choices:
         try:
-            if choice == "curl" and curl_requests is not None:
-                session = curl_requests.Session(impersonate="chrome")
-            elif choice == "cloudscraper" and cloudscraper is not None:
-                session = cloudscraper.create_scraper()
+            if choice == "curl":
+                curl = _load_curl_cffi()
+                if curl is None:
+                    continue
+                session = curl.Session(impersonate="chrome")
+            elif choice == "cloudscraper":
+                scraper = _load_cloudscraper()
+                if scraper is None:
+                    continue
+                session = scraper.create_scraper()
             elif choice == "requests":
                 session = requests.Session()
             else:
@@ -1369,13 +1435,15 @@ def make_http_session(url, config_path=None, backend=None):
         session.headers["User-Agent"] = str(auth["user_agent"])
     if auth.get("cookie"):
         _put_cookie_header(session, host, str(auth["cookie"]))
-    elif browser_cookie3 is not None and any(host == d or host.endswith("." + d) for d in PROTECTED_HOSTS):
+    elif any(host == d or host.endswith("." + d) for d in PROTECTED_HOSTS):
         # Best effort soltanto: profili/browser non disponibili non bloccano il download.
-        try:
-            jar = browser_cookie3.chrome(domain_name=host)
-            session.cookies.update(jar)
-        except Exception:
-            pass
+        cookies_module = _load_browser_cookie3()
+        if cookies_module is not None:
+            try:
+                jar = cookies_module.chrome(domain_name=host)
+                session.cookies.update(jar)
+            except Exception:
+                pass
     return session
 
 
@@ -1392,7 +1460,7 @@ def _request_with_fallback(session, method, url, config_path=None, **kwargs):
         first_error = exc
     used = {type(session).__module__.split(".", 1)[0]}
     for backend in ("cloudscraper", "requests"):
-        if backend == "cloudscraper" and cloudscraper is None:
+        if backend == "cloudscraper" and _load_cloudscraper() is None:
             continue
         if backend == "requests" and "requests" in used:
             continue
@@ -1962,7 +2030,7 @@ def resolve_mega_file(url, timeout=30):
     if not parsed:
         raise LinkResolutionError(
             "Link MEGA non valido o cartella MEGA non supportata.")
-    if _CryptoAES is None:
+    if _load_crypto() is None:
         raise LinkResolutionError(
             "pycryptodome non è installato: impossibile scaricare da MEGA.")
     data = _mega_api_request(
@@ -2002,7 +2070,7 @@ def resolve_mega_file(url, timeout=30):
 
 def decrypt_mega_file(path, key, chunk_size=4 * 1024 * 1024):
     """Decritta in place un blob MEGA (AES-128-CTR, chiave derivata dal link)."""
-    if _CryptoAES is None:
+    if _load_crypto() is None:
         raise LinkResolutionError(
             "pycryptodome non è installato: impossibile decrittare il file MEGA.")
     content_key = bytes(a ^ b for a, b in zip(key[:16], key[16:32]))
@@ -2073,7 +2141,7 @@ def _privatebin_api_url(url):
 
 def _decrypt_privatebin_payload(payload, key_text):
     """Decifra il payload JSON PrivateBin 1.x (AES-GCM + PBKDF2)."""
-    if _CryptoAES is None:
+    if _load_crypto() is None:
         raise PrivateBinError(
             "pycryptodome non è installato: impossibile decifrare il paste PrivateBin.")
     try:
@@ -2388,7 +2456,10 @@ class DownloadManager:
                 raise RuntimeError("La sessione torrent è già stata chiusa.")
             if self._torrent_session is not None:
                 return self._torrent_session
-            session = lt.session()
+            libtorrent = _load_libtorrent()
+            if libtorrent is None:
+                raise RuntimeError("libtorrent non è disponibile.")
+            session = libtorrent.session()
             self._configure_new_torrent_session(session)
             try:
                 session.listen_on(6881, 6891)
@@ -2498,7 +2569,7 @@ class DownloadManager:
         try:
             if placeholder.cancel_event.is_set() or self._closed:
                 return
-            if lt is None:
+            if _load_libtorrent() is None:
                 placeholder.state = "Libtorrent non installato"
                 self.events.put(("libtorrent_missing", placeholder.id))
                 return
@@ -2637,7 +2708,7 @@ class DownloadManager:
         try:
             if placeholder.cancelled or placeholder.cancel_event.is_set() or self._closed:
                 return
-            if lt is None:
+            if _load_libtorrent() is None:
                 placeholder.state = "Libtorrent non installato"
                 self.events.put(("libtorrent_missing", placeholder.id))
                 return
@@ -4017,25 +4088,24 @@ class DownloaderApp:
             self._close_completely()
             return
         if self.close_action == "reduce":
-            if pystray is not None and Image is not None and ImageDraw is not None:
-                self._minimize_to_tray()
-                return
+            self._minimize_to_tray()
+            return
         choice = self._ask_exit_action()
         if choice is None:
             return
         if choice == "reduce":
-            if pystray is None or Image is None or ImageDraw is None:
-                messagebox.showwarning(
-                    translate_ui("Tray non disponibile", self.language),
-                    "pystray e Pillow non sono disponibili. La finestra resterà aperta; installa pystray e Pillow per usare la system tray.",
-                    parent=self.root)
-                return
             self._minimize_to_tray()
             return
         self._close_completely()
 
     def _minimize_to_tray(self):
+        global pystray, Image, ImageDraw
+        pystray = _load_optional("pystray")
+        Image = _load_optional("PIL.Image")
+        ImageDraw = _load_optional("PIL.ImageDraw")
         try:
+            if pystray is None or Image is None or ImageDraw is None:
+                raise RuntimeError("pystray/Pillow non disponibili")
             try:
                 image = Image.open(_app_resource_path("downloadverse.png")).convert("RGBA")
                 image = image.resize((64, 64), Image.Resampling.LANCZOS)
@@ -4618,7 +4688,8 @@ class DownloaderApp:
             info_grid.pack(anchor="w", pady=(0, 16))
             for row_index, (label, value) in enumerate((
                     ("Versione software", APP_VERSION),
-                    ("Autore", "Guglianza e OpenCode"))):
+                    ("Autore", translate_ui("slenter97 con DeepSeek",
+                                            self.language)))):
                 tk.Label(info_grid, text=translate_ui(label, self.language),
                          bg=self.BG, fg=self.MUTED, width=20, anchor="w",
                          font=(APP_FONT_FAMILY, 10)).grid(
@@ -5129,7 +5200,7 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         if not task or task.cancelled or task.cancel_event.is_set() or task.state == "Annullato":
             return
         self._libtorrent_waiting[task_id] = task
-        if lt is not None:
+        if _load_libtorrent() is not None:
             self._resume_waiting_magnets()
             return
         with self._libtorrent_install_lock:
@@ -7246,7 +7317,9 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         else:
             mode = "waiting"
         downloading = mode == "downloading"
-        if ui_render is not None and ImageTk is not None:
+        renderer = _load_optional("ui_render")
+        image_tk = _load_optional("PIL.ImageTk")
+        if renderer is not None and image_tk is not None:
             bucket = 0
             if downloading:
                 bucket = int(((self._overlay_phase % (2 * math.pi))
@@ -7255,11 +7328,11 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                    int(percent or 0), mode, bucket)
             photo = self._progress_photo_cache.get(key)
             if photo is None:
-                if len(self._progress_photo_cache) > 320:
+                if len(self._progress_photo_cache) > 120:
                     self._progress_photo_cache.clear()
-                rendered = ui_render.progress_bar(
+                rendered = renderer.progress_bar(
                     x1 - x0, bar_height, percent or 0, mode, self._overlay_phase)
-                photo = ImageTk.PhotoImage(rendered)
+                photo = image_tk.PhotoImage(rendered)
                 self._progress_photo_cache[key] = photo
             canvas.create_image(x0, y0, anchor="nw", image=photo)
             return downloading

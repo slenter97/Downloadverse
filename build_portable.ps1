@@ -20,6 +20,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed `
     --hidden-import certifi `
     --hidden-import fluid_scrollbar `
     --hidden-import ui_render `
+    --hidden-import requests `
     downloader.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller fallito" }
 
