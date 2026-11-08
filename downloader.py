@@ -9,7 +9,7 @@ Dipendenze: solo libreria standard di Python. La logica di trasferimento è
 indipendente dalla GUI e comunica gli aggiornamenti tramite queue.Queue.
 """
 
-APP_VERSION = "0.9.9"
+APP_VERSION = "1.0.0"
 
 import email.message
 import base64
@@ -30,6 +30,7 @@ import tempfile
 import threading
 import time
 import zlib
+import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import urllib.error
 import urllib.parse
@@ -178,6 +179,73 @@ def _app_resource_path(*parts):
     # Esecuzione dal sorgente: le risorse stanno nella cartella assets.
     fallback = os.path.join(base, "assets", *parts)
     return fallback if os.path.exists(fallback) else candidate
+
+
+STARTUP_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+STARTUP_RUN_NAME = "DOWNLOADVERSE"
+
+
+def _startup_shortcut_paths():
+    """Percorsi delle vecchie scorciatoie di avvio automatico."""
+    paths = []
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        paths.append(os.path.join(appdata, "Microsoft", "Windows",
+                                  "Start Menu", "Programs", "Startup",
+                                  "DOWNLOADVERSE.lnk"))
+    programdata = os.environ.get("ProgramData")
+    if programdata:
+        paths.append(os.path.join(programdata, "Microsoft", "Windows",
+                                  "Start Menu", "Programs", "StartUp",
+                                  "DOWNLOADVERSE.lnk"))
+    return paths
+
+
+def is_startup_enabled():
+    """True se DOWNLOADVERSE è impostato per l'avvio con Windows."""
+    if os.name != "nt":
+        return False
+    try:
+        import winreg
+    except Exception:
+        return False
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, STARTUP_RUN_KEY) as key:
+            value, _kind = winreg.QueryValueEx(key, STARTUP_RUN_NAME)
+            if value:
+                return True
+    except OSError:
+        pass
+    return any(os.path.isfile(path) for path in _startup_shortcut_paths())
+
+
+def set_startup_enabled(enabled):
+    """Attiva o disattiva l'avvio automatico per l'utente corrente."""
+    if os.name != "nt":
+        raise OSError("L'avvio automatico è supportato solo su Windows.")
+    import winreg
+    if enabled:
+        exe_path = os.path.abspath(sys.executable)
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, STARTUP_RUN_KEY, 0,
+                                winreg.KEY_SET_VALUE) as key:
+            winreg.SetValueEx(key, STARTUP_RUN_NAME, 0, winreg.REG_SZ,
+                              f'"{exe_path}"')
+        return
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, STARTUP_RUN_KEY, 0,
+                            winreg.KEY_SET_VALUE) as key:
+            winreg.DeleteValue(key, STARTUP_RUN_NAME)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
+    # Rimuove anche eventuali scorciatoie lasciate dalle versioni precedenti.
+    for path in _startup_shortcut_paths():
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            pass
 
 
 def _apply_window_icon(root):
@@ -1060,6 +1128,89 @@ UI_STRINGS["slenter97 con DeepSeek"] = ("slenter97 with DeepSeek",
 ES_STRINGS["slenter97 con DeepSeek"] = "slenter97 con DeepSeek"
 FR_STRINGS["slenter97 con DeepSeek"] = "slenter97 avec DeepSeek"
 
+UI_STRINGS["Avvio automatico"] = ("Automatic startup", "Automatischer Start")
+ES_STRINGS["Avvio automatico"] = "Inicio automático"
+FR_STRINGS["Avvio automatico"] = "Démarrage automatique"
+
+UI_STRINGS["Avvia DOWNLOADVERSE all'avvio di Windows"] = (
+    "Start DOWNLOADVERSE with Windows",
+    "DOWNLOADVERSE beim Start von Windows starten")
+ES_STRINGS["Avvia DOWNLOADVERSE all'avvio di Windows"] = (
+    "Iniciar DOWNLOADVERSE con Windows")
+FR_STRINGS["Avvia DOWNLOADVERSE all'avvio di Windows"] = (
+    "Démarrer DOWNLOADVERSE avec Windows")
+
+UI_STRINGS["Cerca torrent"] = ("Search torrents", "Torrents suchen")
+ES_STRINGS["Cerca torrent"] = "Buscar torrents"
+FR_STRINGS["Cerca torrent"] = "Rechercher des torrents"
+
+UI_STRINGS["CERCA TORRENT"] = ("SEARCH TORRENTS", "TORRENTS SUCHEN")
+ES_STRINGS["CERCA TORRENT"] = "BUSCAR TORRENTS"
+FR_STRINGS["CERCA TORRENT"] = "RECHERCHER DES TORRENTS"
+
+UI_STRINGS["Cerca"] = ("Search", "Suchen")
+ES_STRINGS["Cerca"] = "Buscar"
+FR_STRINGS["Cerca"] = "Rechercher"
+
+UI_STRINGS["Inserisci il nome di un torrent e premi Cerca."] = (
+    "Enter a torrent name and press Search.",
+    "Geben Sie einen Torrent-Namen ein und klicken Sie auf Suchen.")
+ES_STRINGS["Inserisci il nome di un torrent e premi Cerca."] = (
+    "Introduce el nombre de un torrent y pulsa Buscar.")
+FR_STRINGS["Inserisci il nome di un torrent e premi Cerca."] = (
+    "Saisissez le nom d'un torrent et appuyez sur Rechercher.")
+
+UI_STRINGS["Ricerca in corso…"] = ("Searching…", "Suche läuft…")
+ES_STRINGS["Ricerca in corso…"] = "Buscando…"
+FR_STRINGS["Ricerca in corso…"] = "Recherche…"
+
+UI_STRINGS["{0} risultati trovati."] = (
+    "{0} results found.", "{0} Ergebnisse gefunden.")
+ES_STRINGS["{0} risultati trovati."] = "{0} resultados encontrados."
+FR_STRINGS["{0} risultati trovati."] = "{0} résultats trouvés."
+
+UI_STRINGS["Nessun risultato trovato."] = (
+    "No results found.", "Keine Ergebnisse gefunden.")
+ES_STRINGS["Nessun risultato trovato."] = "No se encontraron resultados."
+FR_STRINGS["Nessun risultato trovato."] = "Aucun résultat trouvé."
+
+UI_STRINGS["Aggiungi alla coda"] = ("Add to queue",
+                                    "Zur Warteschlange hinzufügen")
+ES_STRINGS["Aggiungi alla coda"] = "Añadir a la cola"
+FR_STRINGS["Aggiungi alla coda"] = "Ajouter à la file"
+
+UI_STRINGS["Aggiunto alla coda."] = ("Added to queue.",
+                                     "Zur Warteschlange hinzugefügt.")
+ES_STRINGS["Aggiunto alla coda."] = "Añadido a la cola."
+FR_STRINGS["Aggiunto alla coda."] = "Ajouté à la file."
+
+UI_STRINGS["Seleziona un risultato da aggiungere."] = (
+    "Select a result to add.", "Wählen Sie ein Ergebnis zum Hinzufügen.")
+ES_STRINGS["Seleziona un risultato da aggiungere."] = (
+    "Selecciona un resultado para añadir.")
+FR_STRINGS["Seleziona un risultato da aggiungere."] = (
+    "Sélectionnez un résultat à ajouter.")
+
+UI_STRINGS["SEED"] = ("SEEDS", "SEEDS")
+ES_STRINGS["SEED"] = "SEEDS"
+FR_STRINGS["SEED"] = "SEEDS"
+
+UI_STRINGS["FONTE"] = ("SOURCE", "QUELLE")
+ES_STRINGS["FONTE"] = "FUENTE"
+FR_STRINGS["FONTE"] = "SOURCE"
+
+UI_STRINGS["NOME"] = ("NAME", "NAME")
+ES_STRINGS["NOME"] = "NOMBRE"
+FR_STRINGS["NOME"] = "NOM"
+
+UI_STRINGS["Attenzione: il torrent contiene la stagione {found}, non la stagione {expected}."] = (
+    "Warning: this torrent contains season {found}, not season {expected}.",
+    "Achtung: Dieser Torrent enthält Staffel {found}, nicht Staffel {expected}.")
+ES_STRINGS["Attenzione: il torrent contiene la stagione {found}, non la stagione {expected}."] = (
+    "Atención: el torrent contiene la temporada {found}, no la temporada {expected}.")
+FR_STRINGS["Attenzione: il torrent contiene la stagione {found}, non la stagione {expected}."] = (
+    "Attention : ce torrent contient la saison {found}, pas la saison {expected}.")
+
 
 def translate_ui(text, language):
     if language == "it": return text
@@ -1145,6 +1296,30 @@ def progress_bar_text(percent, segments=PROGRESS_SEGMENTS):
     percent = max(0, min(100, int(percent)))
     filled = min(segments, (percent * segments) // 100)
     return "█" * filled + "░" * (segments - filled)
+
+
+_SEASON_PATTERNS = (
+    re.compile(r"\bS(\d{1,2})[ ._-]?E\d{1,3}\b", re.IGNORECASE),
+    re.compile(r"\b(\d{1,2})x(\d{2,3})\b", re.IGNORECASE),
+    re.compile(r"\bS(\d{1,2})\b", re.IGNORECASE),
+    re.compile(r"\b(?:Season|Stagione|Staffel|Temporada|Saison)\s*(\d{1,2})\b",
+               re.IGNORECASE),
+)
+
+
+def torrent_season_numbers(text):
+    """Stagioni riconosciute nei nomi dei file o nel titolo del torrent."""
+    seasons = set()
+    for pattern in _SEASON_PATTERNS:
+        for match in pattern.finditer(text or ""):
+            for group in match.groups():
+                if group:
+                    try:
+                        seasons.add(int(group))
+                    except (TypeError, ValueError):
+                        pass
+                    break
+    return seasons
 
 
 def aggregate_torrent_progress(tasks):
@@ -2302,6 +2477,173 @@ def fetch_urls_from_source(url, session=None, timeout=25):
     return urls
 
 
+TORRENT_SEARCH_TRACKERS = (
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://exodus.desync.com:6969/announce",
+    "udp://tracker.openbittorrent.com:6969/announce",
+)
+
+
+def _torrent_magnet(info_hash, name):
+    """Costruisce un magnet con tracker comuni a partire dall'hash."""
+    trackers = "".join(
+        "&tr=" + urllib.parse.quote(tracker, safe="")
+        for tracker in TORRENT_SEARCH_TRACKERS)
+    return (f"magnet:?xt=urn:btih:{str(info_hash).lower()}"
+            f"&dn={urllib.parse.quote(name or '', safe='')}{trackers}")
+
+
+def _torrent_search_apibay(query, session, limit=30):
+    """Risultati da The Pirate Bay (API pubblica apibay.org)."""
+    response = session.get("https://apibay.org/q.php",
+                           params={"q": query, "cat": "0"}, timeout=20)
+    response.raise_for_status()
+    rows = response.json()
+    results = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        info_hash = str(row.get("info_hash") or "").strip()
+        if not re.fullmatch(r"[0-9A-Fa-f]{40}", info_hash):
+            continue
+        name = html_module.unescape(str(row.get("name") or "")).strip()
+        try:
+            size = int(row.get("size") or 0)
+            seeders = int(row.get("seeders") or 0)
+            leechers = int(row.get("leechers") or 0)
+        except (TypeError, ValueError):
+            continue
+        results.append({
+            "infohash": info_hash.lower(),
+            "name": name,
+            "size": size,
+            "seeders": seeders,
+            "leechers": leechers,
+            "source": "The Pirate Bay",
+            "magnet": _torrent_magnet(info_hash, name),
+        })
+    return results[:limit]
+
+
+def _torrent_search_torrents_csv(query, session, limit=30):
+    """Risultati dall'indice pubblico Torrents-CSV."""
+    response = session.get("https://torrents-csv.com/service/search",
+                           params={"q": query, "size": limit}, timeout=20)
+    response.raise_for_status()
+    payload = response.json()
+    rows = payload.get("torrents") if isinstance(payload, dict) else payload
+    results = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        info_hash = str(row.get("infohash") or "").strip()
+        if not re.fullmatch(r"[0-9A-Fa-f]{40}", info_hash):
+            continue
+        name = html_module.unescape(str(row.get("name") or "")).strip()
+        try:
+            size = int(row.get("size_bytes") or 0)
+            seeders = int(row.get("seeders") or 0)
+            leechers = int(row.get("leechers") or 0)
+        except (TypeError, ValueError):
+            continue
+        results.append({
+            "infohash": info_hash.lower(),
+            "name": name,
+            "size": size,
+            "seeders": seeders,
+            "leechers": leechers,
+            "source": "Torrents-CSV",
+            "magnet": _torrent_magnet(info_hash, name),
+        })
+    return results[:limit]
+
+
+def _parse_size_text(text):
+    match = re.search(r"([\d.]+)\s*([KMGT]?i?B)", text or "", re.I)
+    if not match:
+        return 0
+    try:
+        value = float(match.group(1))
+    except ValueError:
+        return 0
+    unit = match.group(2).upper()
+    factors = {
+        "B": 1, "KB": 1024, "KIB": 1024, "MB": 1024 ** 2,
+        "MIB": 1024 ** 2, "GB": 1024 ** 3, "GIB": 1024 ** 3,
+        "TB": 1024 ** 4, "TIB": 1024 ** 4,
+    }
+    return int(value * factors.get(unit, 1))
+
+
+def _torrent_search_nyaa(query, session, limit=30):
+    """Risultati dal feed RSS pubblico di Nyaa."""
+    response = session.get("https://nyaa.si/", params={
+        "page": "rss", "q": query, "c": "0_0", "f": "0"}, timeout=20)
+    response.raise_for_status()
+    root = ET.fromstring(response.content)
+    namespace = {"nyaa": "https://nyaa.si/xmlns/nyaa"}
+    results = []
+    for item in root.findall("./channel/item")[:limit]:
+        title = (item.findtext("title") or "").strip()
+        info_hash = (item.findtext("nyaa:infoHash", default="",
+                                   namespaces=namespace) or "").strip()
+        if not re.fullmatch(r"[0-9A-Fa-f]{40}", info_hash):
+            continue
+        try:
+            seeders = int(item.findtext("nyaa:seeders", default="0",
+                                        namespaces=namespace) or 0)
+            leechers = int(item.findtext("nyaa:leechers", default="0",
+                                         namespaces=namespace) or 0)
+        except (TypeError, ValueError):
+            seeders = leechers = 0
+        size = _parse_size_text(
+            item.findtext("nyaa:size", default="", namespaces=namespace))
+        results.append({
+            "infohash": info_hash.lower(),
+            "name": title,
+            "size": size,
+            "seeders": seeders,
+            "leechers": leechers,
+            "source": "Nyaa",
+            "magnet": _torrent_magnet(info_hash, title),
+        })
+    return results[:limit]
+
+
+def search_public_torrents(query, limit=60):
+    """Cerca su più fonti pubbliche e unisce i risultati per hash."""
+    query = (query or "").strip()
+    if not query:
+        return []
+    session = make_http_session("https://apibay.org/")
+    merged = {}
+    try:
+        for _label, provider in (
+                ("The Pirate Bay", _torrent_search_apibay),
+                ("Torrents-CSV", _torrent_search_torrents_csv),
+                ("Nyaa", _torrent_search_nyaa)):
+            try:
+                rows = provider(query, session, 30)
+            except Exception as exc:
+                logging.info("Ricerca torrent non riuscita su %s: %s", _label, exc)
+                continue
+            for row in rows:
+                current = merged.get(row["infohash"])
+                if current is None or row["seeders"] > current["seeders"]:
+                    merged[row["infohash"]] = row
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
+    ordered = sorted(merged.values(),
+                     key=lambda item: (item["seeders"], item["leechers"]),
+                     reverse=True)
+    return ordered[:limit]
+
+
 class ImportGroup:
     """Gruppo espandibile dei file aggiunti da un'unica importazione."""
     def __init__(self, iid, name):
@@ -2372,6 +2714,8 @@ class TorrentJob:
         self.handle = handle
         self.magnet_url = magnet_url
         self.files = []
+        self.files_by_index = {}
+        self.preexisting = {}
         self.tasks = {}
         self.info = None
         self.selected_indices = set()
@@ -2554,6 +2898,7 @@ class DownloadManager:
 
     def _torrent_files(self, info):
         storage = info.files()
+        pad_flag = getattr(getattr(lt, "file_storage", None), "flag_pad_file", 0)
         files = []
         for index in range(storage.num_files()):
             path = storage.file_path(index)
@@ -2561,8 +2906,24 @@ class DownloadManager:
             safe_path = os.path.normpath(path).replace("\\", os.sep).replace("/", os.sep)
             if os.path.isabs(safe_path) or safe_path == ".." or safe_path.startswith(".." + os.sep):
                 raise ValueError("Il torrent contiene un percorso file non sicuro.")
-            files.append({"path": safe_path, "size": int(size)})
+            try:
+                is_pad = bool(storage.file_flags(index) & pad_flag)
+            except Exception:
+                is_pad = False
+            files.append({"index": index, "path": safe_path,
+                          "size": int(size), "pad": is_pad})
         return files
+
+    def _torrent_output_path(self, item):
+        """Percorso finale di un file torrent, o None se esce dalla cartella."""
+        try:
+            root = os.path.abspath(self.destination)
+            path = os.path.abspath(os.path.join(root, item["path"]))
+            if os.path.commonpath((root, path)) != root:
+                return None
+            return path
+        except (KeyError, TypeError, ValueError, OSError):
+            return None
 
     def _resolve_torrent_file(self, placeholder, path):
         job = None
@@ -2621,6 +2982,7 @@ class DownloadManager:
             if job.selection_pending:
                 return False
             job.files, job.info, job.selection_pending = files, info, True
+            job.files_by_index = {item["index"]: item for item in files}
             try:
                 job.handle.pause()
             except Exception:
@@ -2639,19 +3001,45 @@ class DownloadManager:
         return True
 
     def confirm_torrent_selection(self, placeholder, job, selected_indices):
-        selected = set(selected_indices)
+        selected = []
+        for value in selected_indices or ():
+            try:
+                index = int(value)
+            except (TypeError, ValueError):
+                continue
+            item = job.files_by_index.get(index)
+            if item is None or item.get("pad"):
+                continue
+            if index not in selected:
+                selected.append(index)
+        selected.sort()
+        # Fotografa i file già presenti prima di qualsiasi trasferimento: serve
+        # a distinguere i file dell'utente dall'allocazione fatta da libtorrent.
+        job.preexisting = {}
+        for index in selected:
+            path = self._torrent_output_path(job.files_by_index[index])
+            if path and os.path.isfile(path):
+                try:
+                    job.preexisting[index] = os.path.getsize(path)
+                except OSError:
+                    job.preexisting[index] = -1
         children = []
         with self._condition:
             if (placeholder not in self.tasks or placeholder.cancelled
                     or placeholder.cancel_event.is_set() or job._removed):
                 return False
-            priorities = [4 if i in selected else 0 for i in range(len(job.files))]
-            job.handle.prioritize_files(priorities)
+            # Le priorità restano a zero e il torrent resta in pausa: i file
+            # non vengono creati né scaricati finché il relativo task non parte.
+            try:
+                job.handle.prioritize_files([0] * len(job.files))
+                job.handle.pause()
+            except Exception:
+                logging.exception("Impossibile preparare la selezione torrent")
             self.tasks.remove(placeholder)
             job.selection_pending = False
             job.selected_indices = set(selected)
-            for index in sorted(selected):
-                item = job.files[index]
+            for index in selected:
+                item = job.files_by_index[index]
                 child = DownloadTask(self._next_id, placeholder.url, self._next_order,
                                      filename=item["path"])
                 self._next_id += 1
@@ -2663,9 +3051,6 @@ class DownloadManager:
                 job.tasks[index] = child
             self._magnet_pending.discard(placeholder.url)
             self._condition.notify_all()
-        if children:
-            try: job.handle.resume()
-            except Exception: logging.exception("Impossibile avviare il torrent selezionato")
         self.events.put(("torrent_ready", placeholder.id, children, job))
         if not children:
             with self._condition:
@@ -3538,13 +3923,18 @@ class DownloadManager:
     @staticmethod
     def _set_torrent_file_priority(task, priority):
         try:
-            handle = task.torrent_job.handle
+            job = task.torrent_job
+            handle = job.handle if job is not None else None
+            index = task.torrent_index
+            if handle is None or index is None:
+                return
             if hasattr(handle, "file_priority"):
-                handle.file_priority(task.torrent_index, int(priority))
+                handle.file_priority(int(index), int(priority))
             else:
                 values = list(handle.file_priorities())
-                values[task.torrent_index] = int(priority)
-                handle.prioritize_files(values)
+                if 0 <= int(index) < len(values):
+                    values[int(index)] = int(priority)
+                    handle.prioritize_files(values)
         except Exception:
             logging.exception("Impossibile aggiornare priorità file torrent %s", task.name)
 
@@ -3559,10 +3949,19 @@ class DownloadManager:
                 self._active.discard(task.id)
                 self._condition.notify_all()
             return
-        item = job.files[index]
-        final_path = os.path.abspath(os.path.join(self.destination, item["path"]))
-        root = os.path.abspath(self.destination)
-        if os.path.commonpath((root, final_path)) != root:
+        item = job.files_by_index.get(index)
+        if item is None:
+            item = job.files[index] if 0 <= index < len(job.files) else None
+        if item is None:
+            task.state, task.error = "Errore", "File torrent non valido."
+            task.running = False
+            self._notify(task)
+            with self._condition:
+                self._active.discard(task.id)
+                self._condition.notify_all()
+            return
+        final_path = self._torrent_output_path(item)
+        if final_path is None:
             task.state, task.error = "Errore", "Percorso torrent non sicuro."
             task.running = False
             self._notify(task)
@@ -3573,16 +3972,29 @@ class DownloadManager:
             return
         try:
             os.makedirs(os.path.dirname(final_path), exist_ok=True)
-            if os.path.exists(final_path):
-                task.overwrite_path = final_path
-                task.overwrite_event.clear()
-                self.events.put(("overwrite_prompt", task.id, final_path))
-                while not task.overwrite_event.wait(0.2):
-                    if task.cancel_event.is_set():
-                        raise InterruptedError("Download annullato")
-                if not task.overwrite_allowed:
-                    task.state, task.error = "Annullato", "Sovrascrittura rifiutata"
-                    return
+            # Chiede conferma solo per file realmente presenti prima della
+            # selezione, con dimensione diversa e non già usati da libtorrent.
+            preexisting_size = getattr(job, "preexisting", {}).get(index, 0)
+            expected_size = int(item.get("size") or 0)
+            if preexisting_size and preexisting_size != expected_size:
+                try:
+                    progress_values = job.handle.file_progress()
+                    own_bytes = (int(progress_values[index])
+                                 if index < len(progress_values) else 0)
+                except Exception:
+                    own_bytes = 0
+                if own_bytes <= 0:
+                    task.overwrite_path = final_path
+                    task.overwrite_event.clear()
+                    self.events.put(("overwrite_prompt", task.id, final_path))
+                    while not task.overwrite_event.wait(0.2):
+                        if task.cancel_event.is_set():
+                            raise InterruptedError("Download annullato")
+                    if not task.overwrite_allowed:
+                        self._set_torrent_file_priority(task, 0)
+                        job.selected_indices.discard(index)
+                        task.state, task.error = "Annullato", "Sovrascrittura rifiutata"
+                        return
             task.path = final_path
             task.downloaded = 0
             task.total = item["size"]
@@ -4498,8 +4910,9 @@ class DownloaderApp:
             activeforeground=self.ACCENT_HOVER, disabledforeground=self.MUTED,
             cursor="hand2", takefocus=True)
         self.pause_button.pack(side="left", padx=8)
-        ttk.Button(queue_controls, text="RIMUOVI", command=self._remove_selected).pack(side="left", padx=8)
+        ttk.Button(queue_controls, text=translate_ui("Rimuovi", self.language), command=self._remove_selected).pack(side="left", padx=8)
         ttk.Button(queue_controls, text=translate_ui("Apri file torrent", self.language), command=self._choose_torrent_files).pack(side="left", padx=8)
+        ttk.Button(queue_controls, text=translate_ui("Cerca torrent", self.language), command=self._open_torrent_search).pack(side="left", padx=8)
         self.selection_bar = tk.Frame(self.root, bg=self.PANEL, padx=26, pady=7)
         ttk.Button(self.selection_bar, text=translate_ui("Seleziona tutti", self.language), command=self._select_all_rows).pack(side="left")
         ttk.Button(self.selection_bar, text=translate_ui("Deseleziona", self.language), command=self._deselect_rows).pack(side="left", padx=6)
@@ -4529,7 +4942,7 @@ class DownloaderApp:
         self.tree.heading("upload", text="UPLOAD")
         self.tree.heading("peer", text="PEER")
         self.tree.heading("priority", text="PRIORITÀ")
-        self.tree.heading("state", text="STATO")
+        self.tree.heading("state", text="STATO", anchor="w")
         self.tree.column("#0", width=280, minwidth=170, stretch=True, anchor="w")
         self.tree.column("progress", width=175, minwidth=110, stretch=True, anchor="center")
         self.tree.column("percent", width=62, minwidth=54, stretch=False, anchor="center")
@@ -4550,6 +4963,7 @@ class DownloaderApp:
 
         # Barra di avanzamento grafica sovrapposta alla colonna "progress".
         self._overlay_phase = 0.0
+        self._overlay_clock = time.monotonic()
         self._overlay_after = None
         self._progress_photo_cache = {}
         self.progress_overlay = tk.Canvas(self.tree, bg=self.ROW, bd=0,
@@ -4565,6 +4979,11 @@ class DownloaderApp:
                        lambda _event: self._schedule_progress_overlay(), add="+")
         self.tree.bind("<Configure>",
                        lambda event: self._fit_tree_columns(event), add="+")
+        # Il trascinamento delle intestazioni ridimensiona le colonne senza
+        # generare un <Configure>: la barra sovrapposta va riallineata subito.
+        for sequence in ("<Button-1>", "<B1-Motion>", "<ButtonRelease-1>"):
+            self.tree.bind(sequence,
+                           lambda _event: self._schedule_progress_overlay(), add="+")
         self.root.after(120, self._progress_overlay_tick)
 
         self.empty_state = tk.Frame(table_wrap, bg=self.ROW)
@@ -4697,6 +5116,27 @@ class DownloaderApp:
                 tk.Label(info_grid, text=value, bg=self.BG, fg=self.TEXT,
                          anchor="w", font=(APP_FONT_FAMILY, 10, "bold")).grid(
                              row=row_index, column=1, sticky="w", pady=4)
+            self.startup_var = tk.BooleanVar(value=is_startup_enabled())
+
+            def toggle_startup():
+                try:
+                    set_startup_enabled(self.startup_var.get())
+                except OSError as exc:
+                    self.startup_var.set(not self.startup_var.get())
+                    messagebox.showerror(
+                        translate_ui("Avvio automatico", self.language),
+                        str(exc), parent=self.settings_window or self.root)
+                    return
+                self.startup_var.set(is_startup_enabled())
+
+            tk.Checkbutton(
+                self.settings_content,
+                text=translate_ui("Avvia DOWNLOADVERSE all'avvio di Windows",
+                                  self.language),
+                variable=self.startup_var, command=toggle_startup,
+                bg=self.BG, fg=self.TEXT, activebackground=self.BG,
+                activeforeground=self.TEXT, selectcolor=self.PANEL,
+                font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(0, 14))
             self.update_status_var = tk.StringVar(value="")
             self.update_check_button = ttk.Button(
                 self.settings_content,
@@ -5062,8 +5502,18 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
             for button, key in self.side_menu_items:
                 button.configure(text=translate_ui(key, self.language))
         if hasattr(self, "tree"):
-            for col, text in (("#0", "NOME FILE"), ("progress", "PROGRESSO"), ("percent", "%"), ("size", "DIMENSIONE"), ("speed", "VELOCITÀ"), ("upload", "UPLOAD"), ("peer", "PEER"), ("priority", "PRIORITÀ"), ("state", "STATO")):
-                self.tree.heading(col, text=translate_ui(text, self.language))
+            for col, text, anchor in (
+                    ("#0", "NOME FILE", "w"),
+                    ("progress", "PROGRESSO", "w"),
+                    ("percent", "%", "center"),
+                    ("size", "DIMENSIONE", "center"),
+                    ("speed", "VELOCITÀ", "center"),
+                    ("upload", "UPLOAD", "center"),
+                    ("peer", "PEER", "center"),
+                    ("priority", "PRIORITÀ", "center"),
+                    ("state", "STATO", "w")):
+                self.tree.heading(col, text=translate_ui(text, self.language),
+                                  anchor=anchor)
         if getattr(self, "settings_window", None) is not None:
             try:
                 if self.settings_window.winfo_exists():
@@ -5659,7 +6109,7 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
             state = "Annullato"
         else:
             state = "In coda"
-        values = (progress_bar_text(percent),
+        values = ("",
                   f"{percent}%" if total > 0 else "—",
                   human_size(total) if total > 0 else "—",
                   f"{human_size(speed)}/s" if speed > 0 else "—",
@@ -5972,6 +6422,179 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         _center_window(window, self.root)
         self._applica_titlebar_finestra(window)
         window.grab_set()
+
+    def _open_torrent_search(self):
+        existing = getattr(self, "torrent_search_window", None)
+        if existing is not None:
+            try:
+                existing.deiconify()
+                existing.lift()
+                return
+            except tk.TclError:
+                self.torrent_search_window = None
+        window = tk.Toplevel(self.root)
+        window.title(translate_ui("Cerca torrent", self.language))
+        window.configure(bg=self.PANEL)
+        window.geometry("940x620")
+        window.minsize(720, 500)
+        window.transient(self.root)
+        self.torrent_search_window = window
+        self.torrent_search_running = False
+        self.torrent_search_rows = {}
+
+        body = tk.Frame(window, bg=self.PANEL, padx=18, pady=16)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text=translate_ui("CERCA TORRENT", self.language),
+                 bg=self.PANEL, fg=self.ACCENT,
+                 font=(APP_FONT_FAMILY, 11, "bold")).pack(anchor="w")
+        search_row = tk.Frame(body, bg=self.PANEL)
+        search_row.pack(fill="x", pady=(10, 6))
+        self.torrent_search_var = tk.StringVar()
+        entry = ttk.Entry(search_row, textvariable=self.torrent_search_var,
+                          style="Settings.TEntry")
+        entry.pack(side="left", fill="x", expand=True)
+        self.torrent_search_button = ttk.Button(
+            search_row, text=translate_ui("Cerca", self.language),
+            style="Accent.TButton", command=self._start_torrent_search)
+        self.torrent_search_button.pack(side="left", padx=(8, 0))
+        self.torrent_search_status = tk.StringVar(value=translate_ui(
+            "Inserisci il nome di un torrent e premi Cerca.", self.language))
+        tk.Label(body, textvariable=self.torrent_search_status, bg=self.PANEL,
+                 fg=self.MUTED, font=(APP_FONT_FAMILY, 9),
+                 anchor="w").pack(fill="x")
+
+        table_wrap = tk.Frame(body, bg=self.PANEL)
+        table_wrap.pack(fill="both", expand=True, pady=(10, 10))
+        columns = ("name", "size", "seeders", "leechers", "source")
+        self.torrent_search_results = ttk.Treeview(
+            table_wrap, columns=columns, show="headings", height=8,
+            style="NoArrow.Treeview")
+        headings = (
+            ("name", "NOME", 420, "w"),
+            ("size", "DIMENSIONE", 110, "e"),
+            ("seeders", "SEED", 70, "center"),
+            ("leechers", "PEER", 70, "center"),
+            ("source", "FONTE", 140, "w"),
+        )
+        for column, label, width, anchor in headings:
+            self.torrent_search_results.heading(
+                column, text=translate_ui(label, self.language), anchor=anchor)
+            self.torrent_search_results.column(
+                column, width=width, minwidth=60, stretch=(column == "name"),
+                anchor=anchor)
+        scrollbar = FluidScrollbar(table_wrap, orient="vertical",
+                                   command=self.torrent_search_results.yview)
+        self.torrent_search_results.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        self.torrent_search_results.pack(side="left", fill="both", expand=True)
+        self.torrent_search_results.bind(
+            "<Double-1>", lambda _event: self._add_torrent_search_selection())
+
+        buttons = tk.Frame(body, bg=self.PANEL)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text=translate_ui("Chiudi", self.language),
+                   command=self._close_torrent_search).pack(side="right")
+        ttk.Button(buttons, text=translate_ui("Aggiungi alla coda", self.language),
+                   style="Accent.TButton",
+                   command=self._add_torrent_search_selection).pack(
+                       side="right", padx=(0, 8))
+
+        entry.bind("<Return>", lambda _event: self._start_torrent_search())
+        window.protocol("WM_DELETE_WINDOW", self._close_torrent_search)
+        _center_window(window, self.root)
+        self._applica_titlebar_finestra(window)
+        entry.focus_set()
+
+    def _start_torrent_search(self):
+        if getattr(self, "torrent_search_running", False):
+            return
+        variable = getattr(self, "torrent_search_var", None)
+        query = variable.get().strip() if variable is not None else ""
+        if not query:
+            return
+        self.torrent_search_running = True
+        button = getattr(self, "torrent_search_button", None)
+        if button is not None:
+            try:
+                button.state(["disabled"])
+            except tk.TclError:
+                pass
+        status = getattr(self, "torrent_search_status", None)
+        if status is not None:
+            status.set(translate_ui("Ricerca in corso…", self.language))
+        threading.Thread(target=self._torrent_search_worker, args=(query,),
+                         name="torrent-search", daemon=True).start()
+
+    def _torrent_search_worker(self, query):
+        results = []
+        error = ""
+        try:
+            results = search_public_torrents(query)
+        except Exception as exc:
+            logging.exception("Ricerca torrent fallita")
+            error = str(exc) or exc.__class__.__name__
+        self.events.put(("torrent_search_result", results, error))
+
+    def _finish_torrent_search(self, results, error):
+        self.torrent_search_running = False
+        button = getattr(self, "torrent_search_button", None)
+        if button is not None:
+            try:
+                button.state(["!disabled"])
+            except tk.TclError:
+                button = None
+        status = getattr(self, "torrent_search_status", None)
+        tree = getattr(self, "torrent_search_results", None)
+        if status is None or tree is None:
+            return
+        if error:
+            status.set(error)
+            return
+        for iid in tree.get_children():
+            tree.delete(iid)
+        self.torrent_search_rows = {}
+        for row in results:
+            iid = tree.insert("", "end", values=(
+                row["name"], human_size(row["size"]),
+                row["seeders"], row["leechers"], row["source"]))
+            self.torrent_search_rows[iid] = row["magnet"]
+        if results:
+            status.set(translate_ui("{0} risultati trovati.",
+                                    self.language).format(len(results)))
+        else:
+            status.set(translate_ui("Nessun risultato trovato.", self.language))
+
+    def _add_torrent_search_selection(self):
+        tree = getattr(self, "torrent_search_results", None)
+        if tree is None:
+            return
+        selection = tree.selection()
+        magnet = (getattr(self, "torrent_search_rows", {}).get(selection[0])
+                  if selection else None)
+        if not magnet:
+            status = getattr(self, "torrent_search_status", None)
+            if status is not None:
+                status.set(translate_ui(
+                    "Seleziona un risultato da aggiungere.", self.language))
+            return
+        self._add_magnet(magnet)
+        status = getattr(self, "torrent_search_status", None)
+        if status is not None:
+            status.set(translate_ui("Aggiunto alla coda.", self.language))
+
+    def _close_torrent_search(self):
+        window = getattr(self, "torrent_search_window", None)
+        self.torrent_search_window = None
+        self.torrent_search_button = None
+        self.torrent_search_results = None
+        self.torrent_search_status = None
+        self.torrent_search_rows = {}
+        self.torrent_search_var = None
+        if window is not None:
+            try:
+                window.destroy()
+            except tk.TclError:
+                pass
 
     def _choose_torrent_files(self, folder_mode=False, initial_path=None,
                               on_folder_selected=None, parent=None):
@@ -6624,8 +7247,34 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         body.pack(fill="both", expand=True)
         tk.Label(body, text=translate_ui("Seleziona i file del torrent", self.language), bg=self.PANEL,
                  fg=self.ACCENT, font=(APP_FONT_FAMILY, 11, "bold")).pack(anchor="w")
-        tk.Label(body, text=translate_ui("Recupero metadati torrent…", self.language), bg=self.PANEL,
-                 fg=self.MUTED, font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(3, 10))
+        torrent_name = ""
+        try:
+            torrent_name = job.info.name() if job.info is not None else ""
+        except Exception:
+            torrent_name = ""
+        visible_files = [item for item in job.files if not item.get("pad")]
+        visible_total = sum(item["size"] for item in visible_files)
+        subtitle_parts = [part for part in (
+            torrent_name, f"{len(visible_files)} file", human_size(visible_total)) if part]
+        tk.Label(body, text=" · ".join(subtitle_parts), bg=self.PANEL,
+                 fg=self.MUTED, font=(APP_FONT_FAMILY, 9), wraplength=620,
+                 justify="left", anchor="w").pack(fill="x", pady=(3, 4))
+        expected_seasons = torrent_season_numbers(torrent_name) if torrent_name else set()
+        found_seasons = set()
+        for item in visible_files:
+            found_seasons.update(
+                torrent_season_numbers(os.path.basename(item["path"])))
+        if expected_seasons and found_seasons and not (expected_seasons & found_seasons):
+            warning = translate_ui(
+                "Attenzione: il torrent contiene la stagione {found}, non la stagione {expected}.",
+                self.language).format(
+                    found=", ".join(str(value) for value in sorted(found_seasons)),
+                    expected=", ".join(str(value) for value in sorted(expected_seasons)))
+            tk.Label(body, text=warning, bg=self.PANEL, fg=self.ACCENT,
+                     font=(APP_FONT_FAMILY, 9, "bold"), wraplength=620,
+                     justify="left", anchor="w").pack(fill="x", pady=(0, 8))
+        else:
+            tk.Frame(body, bg=self.PANEL, height=4).pack()
         listing = tk.Frame(body, bg=self.ROW, highlightbackground=self.LINE, highlightthickness=1)
         listing.pack(fill="both", expand=True)
         canvas = tk.Canvas(listing, bg=self.ROW, highlightthickness=0)
@@ -6638,34 +7287,35 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
         vars_ = []
-        for index, item in enumerate(job.files):
+        for row_index, item in enumerate(visible_files):
             var = tk.BooleanVar(value=True)
-            vars_.append(var)
+            vars_.append((item, var))
             row = tk.Frame(inner, bg=self.ROW, padx=9, pady=5)
-            row.grid(row=index, column=0, sticky="ew")
+            row.grid(row=row_index, column=0, sticky="ew")
             inner.columnconfigure(0, weight=1)
             tk.Checkbutton(row, variable=var, bg=self.ROW, activebackground=self.ROW,
                            selectcolor=self.PANEL, fg=self.TEXT, activeforeground=self.TEXT,
                            relief="flat", highlightthickness=0,
                            command=lambda: update_total()).grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, 8))
-            tk.Label(row, text=item["path"], bg=self.ROW, fg=self.TEXT,
+            tk.Label(row, text=os.path.basename(item["path"]), bg=self.ROW, fg=self.TEXT,
                      font=(APP_FONT_FAMILY, 9, "bold"), anchor="w").grid(row=0, column=1, sticky="w")
-            tk.Label(row, text=human_size(item["size"]), bg=self.ROW, fg=self.MUTED,
+            tk.Label(row, text=f"{human_size(item['size'])}  ·  {item['path']}",
+                     bg=self.ROW, fg=self.MUTED,
                      font=(APP_FONT_FAMILY, 8), anchor="w").grid(row=1, column=1, sticky="w")
             row.columnconfigure(1, weight=1)
         total_label = tk.Label(body, text="", bg=self.PANEL, fg=self.MUTED, font=(APP_FONT_FAMILY, 9))
         total_label.pack(anchor="w", pady=(8, 0))
         def update_total():
-            total = sum(item["size"] for item, var in zip(job.files, vars_) if var.get())
+            total = sum(item["size"] for item, var in vars_ if var.get())
             total_label.configure(text=f"{translate_ui('Totale selezionato:', self.language)} {human_size(total)}")
         def select_all():
-            for var in vars_: var.set(True)
+            for _item, var in vars_: var.set(True)
             update_total()
         def deselect_all():
-            for var in vars_: var.set(False)
+            for _item, var in vars_: var.set(False)
             update_total()
         def confirm():
-            selected = [i for i, var in enumerate(vars_) if var.get()]
+            selected = sorted({item["index"] for item, var in vars_ if var.get()})
             self._close_torrent_selection(window)
             self.manager.confirm_torrent_selection(placeholder, job, selected)
         def cancel():
@@ -6878,7 +7528,7 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
             for task in tasks
         )
         return not has_unfinished_active or messagebox.askyesno(
-            translate_ui("RIMUOVI", self.language),
+            translate_ui("Rimuovi", self.language),
             translate_ui("Sei sicuro di rimuovere i file in download?", self.language),
             parent=self.root)
 
@@ -7086,7 +7736,7 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         if task.torrent_job is not None and not task.torrent_job.group_iid:
             rate = task.torrent_job.upload_rate
             upload_speed = f"{human_size(rate)}/s" if rate > 0 else "0 B/s"
-        values = (progress_bar_text(task.percent), f"{task.percent}%" if task.total is not None else "—",
+        values = ("", f"{task.percent}%" if task.total is not None else "—",
                   size, speed, upload_speed, peer_value, translate_ui(task.priority, self.language),
                   (translate_ui(task.error, self.language) if task.state == "Errore" and task.error else translate_ui(task.state, self.language)))
         iid = str(task.id)
@@ -7143,8 +7793,7 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         self.tree.item(group_iid, text=group_name,
                        image=self._group_image(is_open),
                        values=(
-            progress_bar_text(percent),
-            percent_text, human_size(total) if total > 0 else "—", download_rate, upload_rate,
+            "", percent_text, human_size(total) if total > 0 else "—", download_rate, upload_rate,
             str(job.peer_count), "", translate_ui(state, self.language)))
         self._schedule_progress_overlay()
 
@@ -7248,14 +7897,19 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
             self._draw_progress_overlay()
         except tk.TclError:
             pass
+        except Exception:
+            logging.exception("Errore durante il disegno della barra di avanzamento")
 
     def _progress_overlay_tick(self):
         try:
             animated = self._draw_progress_overlay()
         except tk.TclError:
             return
+        except Exception:
+            logging.exception("Errore durante l'animazione della barra di avanzamento")
+            animated = False
         try:
-            self.root.after(110 if animated else 350, self._progress_overlay_tick)
+            self.root.after(60 if animated else 250, self._progress_overlay_tick)
         except tk.TclError:
             pass
 
@@ -7319,19 +7973,21 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         downloading = mode == "downloading"
         renderer = _load_optional("ui_render")
         image_tk = _load_optional("PIL.ImageTk")
+        row_background = self.SELECT_BG if selected else self.ROW
         if renderer is not None and image_tk is not None:
             bucket = 0
             if downloading:
                 bucket = int(((self._overlay_phase % (2 * math.pi))
-                              / (2 * math.pi)) * 10)
+                              / (2 * math.pi)) * 16)
             key = (int(round(x1 - x0)), int(round(bar_height)),
-                   int(percent or 0), mode, bucket)
+                   int(percent or 0), mode, bucket, row_background)
             photo = self._progress_photo_cache.get(key)
             if photo is None:
-                if len(self._progress_photo_cache) > 120:
+                if len(self._progress_photo_cache) > 320:
                     self._progress_photo_cache.clear()
                 rendered = renderer.progress_bar(
-                    x1 - x0, bar_height, percent or 0, mode, self._overlay_phase)
+                    x1 - x0, bar_height, percent or 0, mode, self._overlay_phase,
+                    background=row_background)
                 photo = image_tk.PhotoImage(rendered)
                 self._progress_photo_cache[key] = photo
             canvas.create_image(x0, y0, anchor="nw", image=photo)
@@ -7413,7 +8069,10 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                          width=column_width, height=canvas_height)
         canvas.delete("all")
         selected = set(tree.selection())
-        self._overlay_phase = (self._overlay_phase + 0.34) % (2 * math.pi)
+        now = time.monotonic()
+        elapsed = max(0.0, now - getattr(self, "_overlay_clock", now))
+        self._overlay_clock = now
+        self._overlay_phase = (self._overlay_phase + elapsed * 3.0) % (2 * math.pi)
         animated = False
         for iid, _bbox in rows:
             cell_x, cell_y, cell_w, cell_h = _bbox
@@ -7621,6 +8280,9 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                 elif event[0] == "auto_import_result":
                     _kind, urls, error = event
                     self._finish_auto_import(urls, error)
+                elif event[0] == "torrent_search_result":
+                    _kind, search_results, search_error = event
+                    self._finish_torrent_search(search_results, search_error)
                 elif event[0] == "update_check_result":
                     _kind, info, error = event
                     self._finish_update_check(info, error)

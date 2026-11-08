@@ -61,13 +61,32 @@ def pill_thumb(width, height, hover=False):
     return image.resize((width, height), Image.LANCZOS)
 
 
-def progress_bar(width, height, percent, mode="downloading", phase=0.0):
-    """Barra di avanzamento: traccia grigio chiaro + riempimento rosso."""
+def _hex_rgba(value):
+    value = str(value).lstrip("#")
+    return tuple(int(value[index:index + 2], 16)
+                 for index in (0, 2, 4)) + (255,)
+
+
+def progress_bar(width, height, percent, mode="downloading", phase=0.0,
+                 background=None):
+    """Barra di avanzamento: traccia grigio chiaro + riempimento rosso.
+
+    Se ``background`` è indicato (colore esadecimale), l'immagine viene
+    composta su quello sfondo: i bordi arrotondati non mostrano più gli
+    angoli scuri del canvas, soprattutto sulle righe selezionate.
+    """
     width = max(4, int(width))
     height = max(4, int(height))
     big = (width * SCALE, height * SCALE)
     image = Image.new("RGBA", big, (0, 0, 0, 0))
     radius = big[1] // 2
+
+    def finish():
+        if background is None:
+            return image.resize((width, height), Image.LANCZOS)
+        base = Image.new("RGBA", big, _hex_rgba(background))
+        base.alpha_composite(image)
+        return base.convert("RGB").resize((width, height), Image.LANCZOS)
 
     # Traccia grigio chiaro con bordo tenue.
     track = _vertical_gradient(big, (238, 238, 238), (205, 205, 205))
@@ -81,7 +100,7 @@ def progress_bar(width, height, percent, mode="downloading", phase=0.0):
 
     percent = max(0.0, min(100.0, float(percent)))
     if percent <= 0:
-        return image.resize((width, height), Image.LANCZOS)
+        return finish()
 
     relative = percent / 100.0
     fill_width = max(1, int(round(big[0] * relative)))
@@ -104,13 +123,14 @@ def progress_bar(width, height, percent, mode="downloading", phase=0.0):
     image.paste(fill, (0, 0), fill_mask)
 
     # Riflesso interno sul bordo superiore del riempimento.
-    gloss = Image.new("L", (fill_width, big[1]), 0)
-    ImageDraw.Draw(gloss).rounded_rectangle(
-        (SCALE, SCALE, fill_width - SCALE - 1, big[1] // 2),
-        radius=max(1, fill_radius - SCALE), fill=52)
-    image.paste(Image.new("RGBA", (fill_width, big[1]), (255, 255, 255, 255)),
-                (0, 0), Image.composite(gloss, Image.new("L", (fill_width, big[1]), 0),
-                                        fill_mask))
+    if fill_width > 2 * SCALE and big[1] // 2 > SCALE:
+        gloss = Image.new("L", (fill_width, big[1]), 0)
+        ImageDraw.Draw(gloss).rounded_rectangle(
+            (SCALE, SCALE, fill_width - SCALE - 1, big[1] // 2),
+            radius=max(1, fill_radius - SCALE), fill=52)
+        image.paste(Image.new("RGBA", (fill_width, big[1]), (255, 255, 255, 255)),
+                    (0, 0), Image.composite(gloss, Image.new("L", (fill_width, big[1]), 0),
+                                            fill_mask))
 
     # Banda chiara in movimento, visibile solo durante il download.
     if mode == "downloading" and fill_width > 24 * SCALE and percent < 100:
@@ -118,7 +138,8 @@ def progress_bar(width, height, percent, mode="downloading", phase=0.0):
         band = Image.new("L", (band_width, big[1]), 0)
         band_draw = ImageDraw.Draw(band)
         for x in range(band_width):
-            alpha = int(96 * (math.sin(math.pi * x / max(1, band_width - 1)) ** 1.4))
+            sine = max(0.0, math.sin(math.pi * x / max(1, band_width - 1)))
+            alpha = int(96 * (sine ** 1.4))
             band_draw.line([(x, 0), (x, big[1])], fill=alpha)
         span = max(1, fill_width - band_width)
         position = 0.5 + 0.5 * math.sin(phase * 0.9)
@@ -128,4 +149,4 @@ def progress_bar(width, height, percent, mode="downloading", phase=0.0):
         layer = Image.composite(layer, Image.new("L", big, 0), track_mask)
         image.paste(Image.new("RGBA", big, (255, 255, 255, 255)), (0, 0), layer)
 
-    return image.resize((width, height), Image.LANCZOS)
+    return finish()
