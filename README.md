@@ -8,3 +8,6 @@ Written in python, my goal is to let the manager download files that are slowed 
 
 If you want to fork and create better version feel free to do so, i only want to share this thing for all .
 
+VERSION 1.0.0 IS OUT!
+
+Now you can search a torrent inside the app! It will display results and you can select the torrent and add it to download. No more searching on the browser!
