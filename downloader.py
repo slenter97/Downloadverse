@@ -9,7 +9,7 @@ Dipendenze: solo libreria standard di Python. La logica di trasferimento è
 indipendente dalla GUI e comunica gli aggiornamenti tramite queue.Queue.
 """
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 import email.message
 import base64
@@ -34,6 +34,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 import html as html_module
 from html.parser import HTMLParser
 from http.cookies import SimpleCookie
@@ -964,18 +965,63 @@ def save_download_limits_config(download_rate_limit, upload_rate_limit, connecti
     _write_app_config(values, path)
 
 
+def _normalize_torrent_search_api(row):
+    if not isinstance(row, dict):
+        return None
+    name = str(row.get("name") or "").strip()[:80]
+    url = str(row.get("url") or "").strip()
+    if not url:
+        return None
+    parsed = urllib.parse.urlsplit(url.replace("{query}", "test"))
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None
+    return {"name": name or parsed.netloc, "url": url}
+
+
+def load_torrent_search_apis(path=LANGUAGE_CONFIG_PATH):
+    config = _read_app_config(path)
+    rows = config.get("torrent_search_apis")
+    result = []
+    if isinstance(rows, list):
+        for row in rows:
+            api = _normalize_torrent_search_api(row)
+            if api is not None:
+                result.append(api)
+    if not result:
+        legacy = config.get("torrent_search_api")
+        if isinstance(legacy, str) and legacy.strip():
+            api = _normalize_torrent_search_api(
+                {"name": "API personalizzata", "url": legacy})
+            if api is not None:
+                result.append(api)
+    return result
+
+
+def save_torrent_search_apis(rows, path=LANGUAGE_CONFIG_PATH):
+    cleaned = []
+    for row in rows or ():
+        api = _normalize_torrent_search_api(row)
+        if api is not None:
+            cleaned.append(api)
+    _write_app_config({"torrent_search_apis": cleaned,
+                       "torrent_search_api": ""}, path)
+
+
 def load_torrent_search_api(path=LANGUAGE_CONFIG_PATH):
-    value = _read_app_config(path).get("torrent_search_api", "")
-    return value if isinstance(value, str) else ""
+    apis = load_torrent_search_apis(path)
+    return apis[0]["url"] if apis else ""
 
 
 def save_torrent_search_api(url, path=LANGUAGE_CONFIG_PATH):
     value = (url or "").strip()
     if value:
-        parsed = urllib.parse.urlsplit(value.replace("{query}", "test"))
-        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        api = _normalize_torrent_search_api(
+            {"name": "API personalizzata", "url": value})
+        if api is None:
             raise ValueError("Invalid torrent search API URL")
-    _write_app_config({"torrent_search_api": value}, path)
+        save_torrent_search_apis([api], path)
+    else:
+        save_torrent_search_apis([], path)
 
 class SharedDownloadThrottle:
     """Byte-rate limiter shared by all active HTTP transfer threads."""
@@ -1267,17 +1313,29 @@ ES_STRINGS["Lascia vuoto per usare solo Internet Archive."] = (
 FR_STRINGS["Lascia vuoto per usare solo Internet Archive."] = (
     "Laissez vide pour utiliser uniquement Internet Archive.")
 
-UI_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e l'API configurata nelle impostazioni Torrent."] = (
+UI_STRINGS["Il programma permette di default solo ricerche su fonti legali, eventuali usi non consoni sono un problema dell'utente."] = (
+    "By default the program only searches legal sources; any inappropriate use "
+    "is the user's responsibility.",
+    "Standardmäßig durchsucht das Programm nur legale Quellen; eine unsachgemäße "
+    "Nutzung liegt in der Verantwortung des Benutzers.")
+ES_STRINGS["Il programma permette di default solo ricerche su fonti legali, eventuali usi non consoni sono un problema dell'utente."] = (
+    "Por defecto, el programa solo busca en fuentes legales; cualquier uso "
+    "inadecuado es responsabilidad del usuario.")
+FR_STRINGS["Il programma permette di default solo ricerche su fonti legali, eventuali usi non consoni sono un problema dell'utente."] = (
+    "Par défaut, le programme ne recherche que des sources légales ; tout usage "
+    "inapproprié relève de la responsabilité de l'utilisateur.")
+
+UI_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e le API configurate nelle impostazioni Torrent."] = (
     "Legal sources: Internet Archive (public domain, Creative Commons, free software) "
-    "and the API configured in the Torrent settings.",
+    "and the APIs configured in the Torrent settings.",
     "Legale Quellen: Internet Archive (Gemeinfreiheit, Creative Commons, freie Software) "
-    "und die in den Torrent-Einstellungen konfigurierte API.")
-ES_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e l'API configurata nelle impostazioni Torrent."] = (
+    "und die in den Torrent-Einstellungen konfigurierten APIs.")
+ES_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e le API configurate nelle impostazioni Torrent."] = (
     "Fuentes legales: Internet Archive (dominio público, Creative Commons, software libre) "
-    "y la API configurada en los ajustes de Torrent.")
-FR_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e l'API configurata nelle impostazioni Torrent."] = (
+    "y las API configuradas en los ajustes de Torrent.")
+FR_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e le API configurate nelle impostazioni Torrent."] = (
     "Sources légales : Internet Archive (domaine public, Creative Commons, logiciels libres) "
-    "et l'API configurée dans les paramètres Torrent.")
+    "et les API configurées dans les paramètres Torrent.")
 
 UI_STRINGS["Download del file torrent…"] = (
     "Downloading torrent file…", "Torrent-Datei wird heruntergeladen…")
@@ -1300,6 +1358,207 @@ UI_STRINGS["API personalizzata"] = (
     "Custom API", "Benutzerdefinierte API")
 ES_STRINGS["API personalizzata"] = "API personalizada"
 FR_STRINGS["API personalizzata"] = "API personnalisée"
+
+UI_STRINGS["Aggiungi un'API di ricerca"] = (
+    "Add a search API", "Such-API hinzufügen")
+ES_STRINGS["Aggiungi un'API di ricerca"] = "Añadir una API de búsqueda"
+FR_STRINGS["Aggiungi un'API di ricerca"] = "Ajouter une API de recherche"
+
+UI_STRINGS["Cerca e aggiungi"] = (
+    "Search and add", "Suchen und hinzufügen")
+ES_STRINGS["Cerca e aggiungi"] = "Buscar y añadir"
+FR_STRINGS["Cerca e aggiungi"] = "Rechercher et ajouter"
+
+UI_STRINGS["API"] = ("API", "API")
+ES_STRINGS["API"] = "API"
+FR_STRINGS["API"] = "API"
+
+UI_STRINGS["Integrata"] = ("Built-in", "Integriert")
+ES_STRINGS["Integrata"] = "Integrada"
+FR_STRINGS["Integrata"] = "Intégrée"
+
+UI_STRINGS["Scrivi il nome o l'URL dell'API."] = (
+    "Enter the API name or URL.", "Geben Sie den API-Namen oder die URL ein.")
+ES_STRINGS["Scrivi il nome o l'URL dell'API."] = (
+    "Escribe el nombre o la URL de la API.")
+FR_STRINGS["Scrivi il nome o l'URL dell'API."] = (
+    "Saisissez le nom ou l'URL de l'API.")
+
+UI_STRINGS["Internet Archive è già integrato."] = (
+    "Internet Archive is already built in.", "Internet Archive ist bereits integriert.")
+ES_STRINGS["Internet Archive è già integrato."] = (
+    "Internet Archive ya está integrado.")
+FR_STRINGS["Internet Archive è già integrato."] = (
+    "Internet Archive est déjà intégré.")
+
+UI_STRINGS["Servizio non riconosciuto. Inserisci il dominio o l'URL completo dell'API."] = (
+    "Unrecognised service. Enter the domain or the full API URL.",
+    "Dienst nicht erkannt. Geben Sie die Domain oder die vollständige API-URL ein.")
+ES_STRINGS["Servizio non riconosciuto. Inserisci il dominio o l'URL completo dell'API."] = (
+    "Servicio no reconocido. Introduce el dominio o la URL completa de la API.")
+FR_STRINGS["Servizio non riconosciuto. Inserisci il dominio o l'URL completo dell'API."] = (
+    "Service non reconnu. Saisissez le domaine ou l'URL complète de l'API.")
+
+UI_STRINGS["API già aggiunta."] = (
+    "API already added.", "API bereits hinzugefügt.")
+ES_STRINGS["API già aggiunta."] = "API ya añadida."
+FR_STRINGS["API già aggiunta."] = "API déjà ajoutée."
+
+UI_STRINGS["Impossibile salvare l'API."] = (
+    "Could not save the API.", "API konnte nicht gespeichert werden.")
+ES_STRINGS["Impossibile salvare l'API."] = "No se pudo guardar la API."
+FR_STRINGS["Impossibile salvare l'API."] = "Impossible d'enregistrer l'API."
+
+UI_STRINGS["API aggiunta."] = ("API added.", "API hinzugefügt.")
+ES_STRINGS["API aggiunta."] = "API añadida."
+FR_STRINGS["API aggiunta."] = "API ajoutée."
+
+UI_STRINGS["Ricerca API…"] = ("Searching for API…", "API wird gesucht…")
+ES_STRINGS["Ricerca API…"] = "Buscando API…"
+FR_STRINGS["Ricerca API…"] = "Recherche de l'API…"
+
+UI_STRINGS["API non trovata per questo servizio."] = (
+    "No API found for this service.", "Keine API für diesen Dienst gefunden.")
+ES_STRINGS["API non trovata per questo servizio."] = (
+    "No se encontró ninguna API para este servicio.")
+FR_STRINGS["API non trovata per questo servizio."] = (
+    "Aucune API trouvée pour ce service.")
+
+UI_STRINGS["Seleziona un'API da rimuovere."] = (
+    "Select an API to remove.", "Wählen Sie eine zu entfernende API aus.")
+ES_STRINGS["Seleziona un'API da rimuovere."] = (
+    "Selecciona una API para eliminar.")
+FR_STRINGS["Seleziona un'API da rimuovere."] = (
+    "Sélectionnez une API à supprimer.")
+
+UI_STRINGS["La fonte integrata non può essere rimossa."] = (
+    "The built-in source cannot be removed.",
+    "Die integrierte Quelle kann nicht entfernt werden.")
+ES_STRINGS["La fonte integrata non può essere rimossa."] = (
+    "La fuente integrada no se puede eliminar.")
+FR_STRINGS["La fonte integrata non può essere rimossa."] = (
+    "La source intégrée ne peut pas être supprimée.")
+
+UI_STRINGS["API rimossa."] = ("API removed.", "API entfernt.")
+ES_STRINGS["API rimossa."] = "API eliminada."
+FR_STRINGS["API rimossa."] = "API supprimée."
+
+UI_STRINGS["Scrivi il nome di un servizio noto (es. Internet Archive) oppure il dominio/URL completo dell'API. Se l'API non viene trovata, incolla l'URL con {query} o [QUERY] al posto del testo cercato."] = (
+    "Enter the name of a known service (e.g. Internet Archive) or the domain/full "
+    "API URL. If the API is not found, paste the URL with {query} or [QUERY] in place "
+    "of the search text.",
+    "Geben Sie den Namen eines bekannten Dienstes (z. B. Internet Archive) oder "
+    "die Domain/vollständige API-URL ein. Wenn die API nicht gefunden wird, fügen "
+    "Sie die URL mit {query} oder [QUERY] anstelle des Suchtexts ein.")
+ES_STRINGS["Scrivi il nome di un servizio noto (es. Internet Archive) oppure il dominio/URL completo dell'API. Se l'API non viene trovata, incolla l'URL con {query} o [QUERY] al posto del testo cercato."] = (
+    "Escribe el nombre de un servicio conocido (p. ej. Internet Archive) o el "
+    "dominio/URL completo de la API. Si no se encuentra la API, pega la URL con "
+    "{query} o [QUERY] en lugar del texto buscado.")
+FR_STRINGS["Scrivi il nome di un servizio noto (es. Internet Archive) oppure il dominio/URL completo dell'API. Se l'API non viene trovata, incolla l'URL con {query} o [QUERY] al posto del testo cercato."] = (
+    "Saisissez le nom d'un service connu (par ex. Internet Archive) ou le "
+    "domaine/l'URL complète de l'API. Si l'API n'est pas trouvée, collez l'URL "
+    "avec {query} ou [QUERY] à la place du texte recherché.")
+
+UI_STRINGS["Verifica"] = ("Check", "Prüfen")
+ES_STRINGS["Verifica"] = "Verificar"
+FR_STRINGS["Verifica"] = "Vérifier"
+
+UI_STRINGS["Non verificata"] = ("Not checked", "Nicht geprüft")
+ES_STRINGS["Non verificata"] = "No verificada"
+FR_STRINGS["Non verificata"] = "Non vérifiée"
+
+UI_STRINGS["Verifica…"] = ("Checking…", "Prüfung…")
+ES_STRINGS["Verifica…"] = "Verificando…"
+FR_STRINGS["Verifica…"] = "Vérification…"
+
+UI_STRINGS["Verifica in corso…"] = ("Check in progress…", "Prüfung läuft…")
+ES_STRINGS["Verifica in corso…"] = "Verificación en curso…"
+FR_STRINGS["Verifica in corso…"] = "Vérification en cours…"
+
+UI_STRINGS["Funzionante"] = ("Working", "Funktionsfähig")
+ES_STRINGS["Funzionante"] = "Funcionando"
+FR_STRINGS["Funzionante"] = "Fonctionne"
+
+UI_STRINGS["Non funzionante"] = ("Not working", "Nicht funktionsfähig")
+ES_STRINGS["Non funzionante"] = "No funciona"
+FR_STRINGS["Non funzionante"] = "Ne fonctionne pas"
+
+UI_STRINGS["URL mancante."] = ("Missing URL.", "URL fehlt.")
+ES_STRINGS["URL mancante."] = "Falta la URL."
+FR_STRINGS["URL mancante."] = "URL manquante."
+
+UI_STRINGS["La risposta non è JSON."] = (
+    "The response is not JSON.", "Die Antwort ist kein JSON.")
+ES_STRINGS["La risposta non è JSON."] = "La respuesta no es JSON."
+FR_STRINGS["La risposta non è JSON."] = "La réponse n'est pas du JSON."
+
+UI_STRINGS["JSON non valido."] = ("Invalid JSON.", "Ungültiges JSON.")
+ES_STRINGS["JSON non valido."] = "JSON no válido."
+FR_STRINGS["JSON non valido."] = "JSON invalide."
+
+UI_STRINGS["Formato JSON non riconosciuto."] = (
+    "Unrecognised JSON format.", "JSON-Format nicht erkannt.")
+ES_STRINGS["Formato JSON non riconosciuto."] = (
+    "Formato JSON no reconocido.")
+FR_STRINGS["Formato JSON non riconosciuto."] = (
+    "Format JSON non reconnu.")
+
+UI_STRINGS["Nessun risultato nel formato atteso."] = (
+    "No results in the expected format.",
+    "Keine Ergebnisse im erwarteten Format.")
+ES_STRINGS["Nessun risultato nel formato atteso."] = (
+    "Ningún resultado en el formato esperado.")
+FR_STRINGS["Nessun risultato nel formato atteso."] = (
+    "Aucun résultat dans le format attendu.")
+
+UI_STRINGS["Verifica non riuscita."] = (
+    "Check failed.", "Prüfung fehlgeschlagen.")
+ES_STRINGS["Verifica non riuscita."] = "Verificación fallida."
+FR_STRINGS["Verifica non riuscita."] = "Vérification échouée."
+
+UI_STRINGS["Risposta HTTP non valida."] = (
+    "Invalid HTTP response.", "Ungültige HTTP-Antwort.")
+ES_STRINGS["Risposta HTTP non valida."] = "Respuesta HTTP no válida."
+FR_STRINGS["Risposta HTTP non valida."] = "Réponse HTTP invalide."
+
+UI_STRINGS["Errore di rete."] = ("Network error.", "Netzwerkfehler.")
+ES_STRINGS["Errore di rete."] = "Error de red."
+FR_STRINGS["Errore di rete."] = "Erreur réseau."
+
+UI_STRINGS["Errore di rete:"] = ("Network error:", "Netzwerkfehler:")
+ES_STRINGS["Errore di rete:"] = "Error de red:"
+FR_STRINGS["Errore di rete:"] = "Erreur réseau :"
+
+UI_STRINGS["Seleziona un'API da verificare."] = (
+    "Select an API to check.", "Wählen Sie eine zu prüfende API aus.")
+ES_STRINGS["Seleziona un'API da verificare."] = (
+    "Selecciona una API para verificar.")
+FR_STRINGS["Seleziona un'API da verificare."] = (
+    "Sélectionnez une API à vérifier.")
+
+UI_STRINGS["Internet Archive è sempre attivo."] = (
+    "Internet Archive is always active.",
+    "Internet Archive ist immer aktiv.")
+ES_STRINGS["Internet Archive è sempre attivo."] = (
+    "Internet Archive siempre está activo.")
+FR_STRINGS["Internet Archive è sempre attivo."] = (
+    "Internet Archive est toujours actif.")
+
+UI_STRINGS["Questo è un sito, non un endpoint API."] = (
+    "This is a website, not an API endpoint.",
+    "Dies ist eine Website, kein API-Endpunkt.")
+ES_STRINGS["Questo è un sito, non un endpoint API."] = (
+    "Este es un sitio web, no un endpoint de API.")
+FR_STRINGS["Questo è un sito, non un endpoint API."] = (
+    "Ceci est un site web, pas un endpoint d'API.")
+
+UI_STRINGS["Segnaposto {0} non supportato: usa {query} o [QUERY]."] = (
+    "Placeholder {0} is not supported: use {query} or [QUERY].",
+    "Platzhalter {0} wird nicht unterstützt: verwenden Sie {query} oder [QUERY].")
+ES_STRINGS["Segnaposto {0} non supportato: usa {query} o [QUERY]."] = (
+    "Marcador {0} no compatible: usa {query} o [QUERY].")
+FR_STRINGS["Segnaposto {0} non supportato: usa {query} o [QUERY]."] = (
+    "Paramètre {0} non pris en charge : utilisez {query} ou [QUERY].")
 
 
 def translate_ui(text, language):
@@ -1437,6 +1696,7 @@ def human_size(value):
 
 UPDATE_REPO = "slenter97/Downloadverse"
 UPDATE_RELEASES_URL = f"https://github.com/{UPDATE_REPO}/releases"
+PROJECT_GITHUB_URL = f"https://github.com/{UPDATE_REPO}"
 UPDATE_RELEASES_API = f"https://api.github.com/repos/{UPDATE_REPO}/releases"
 _UPDATE_HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -2585,6 +2845,107 @@ def _torrent_magnet(info_hash, name):
             f"&dn={urllib.parse.quote(name or '', safe='')}{trackers}")
 
 
+TORRENT_SEARCH_API_CATALOG = (
+    {
+        "name": "Internet Archive",
+        "aliases": ("internet archive", "archive.org", "librivox"),
+        "builtin": True,
+        "url": "",
+    },
+)
+
+
+def resolve_torrent_search_api(value):
+    """Riconosce un nome noto o un URL/dominio inserito dall'utente."""
+    text = (value or "").strip()
+    if not text:
+        return None
+    lowered = text.casefold()
+    for entry in TORRENT_SEARCH_API_CATALOG:
+        if (lowered == entry["name"].casefold()
+                or any(alias in lowered for alias in entry["aliases"])):
+            return {"name": entry["name"], "url": entry["url"],
+                    "builtin": entry["builtin"]}
+    if "://" in text or "{query}" in text:
+        api = _normalize_torrent_search_api(
+            {"name": urllib.parse.urlsplit(
+                text.replace("{query}", "test")).netloc, "url": text})
+        if api is not None:
+            return {"name": api["name"], "url": api["url"], "builtin": False}
+    return None
+
+
+def looks_like_domain(value):
+    return bool(re.fullmatch(
+        r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}",
+        (value or "").strip().casefold()))
+
+
+def probe_torrent_search_api(value):
+    """Cerca un endpoint JSON comune per un dominio indicato dall'utente."""
+    base = (value or "").strip().rstrip("/")
+    if not base:
+        return ""
+    if not base.startswith(("http://", "https://")):
+        base = "https://" + base
+    templates = (
+        base + "/api/search?q={query}",
+        base + "/api/torrents?search={query}",
+        base + "/api/v1/search?q={query}",
+        base + "/search?q={query}&format=json",
+        base + "/search.json?q={query}",
+        base + "/api/search?query={query}",
+    )
+    session = make_http_session(base + "/")
+    try:
+        for template in templates:
+            try:
+                response = session.get(template.replace("{query}", "test"),
+                                       timeout=8, allow_redirects=True)
+                if response.status_code != 200:
+                    continue
+                content_type = response.headers.get("Content-Type", "").lower()
+                body = (response.text or "").lstrip()
+                if "json" not in content_type and not body.startswith(("{", "[")):
+                    continue
+                payload = response.json()
+                rows = payload
+                recognised = False
+                if isinstance(payload, dict):
+                    for key in ("results", "torrents", "data", "items", "hits"):
+                        value = payload.get(key)
+                        if isinstance(value, list):
+                            rows, recognised = value, True
+                            break
+                        if (isinstance(value, dict)
+                                and isinstance(value.get("hits"), list)):
+                            rows, recognised = value["hits"], True
+                            break
+                if not recognised and not isinstance(payload, list):
+                    continue
+                if not isinstance(rows, list):
+                    continue
+                for row in rows[:5]:
+                    if not isinstance(row, dict):
+                        continue
+                    has_name = any(key in row for key in
+                                   ("name", "title", "torrent_name"))
+                    has_target = any(key in row for key in (
+                        "magnet", "magnet_uri", "magnet_link", "infohash",
+                        "info_hash", "hash", "torrent_url", "torrent",
+                        "url", "link"))
+                    if has_name and has_target:
+                        return template
+            except Exception:
+                continue
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
+    return ""
+
+
 def _torrent_search_int(value, default=0):
     try:
         if isinstance(value, bool):
@@ -2655,17 +3016,13 @@ def _torrent_search_internet_archive(query, session, limit=30):
     return results[:limit]
 
 
-def _torrent_search_custom(api_url, query, session, limit=30):
+def _torrent_search_custom(api_url, query, session, limit=30,
+                           source_name="API personalizzata"):
     """Risultati dall'API JSON scelta dall'utente nelle impostazioni."""
     api_url = (api_url or "").strip()
     if not api_url:
         return []
-    encoded = urllib.parse.quote_plus(query)
-    if "{query}" in api_url:
-        url = api_url.replace("{query}", encoded)
-    else:
-        url = api_url + ("&" if "?" in api_url else "?") + "q=" + encoded
-    response = session.get(url, timeout=25)
+    response = session.get(_torrent_search_api_url(api_url, query), timeout=25)
     response.raise_for_status()
     payload = response.json()
     rows = payload
@@ -2726,7 +3083,7 @@ def _torrent_search_custom(api_url, query, session, limit=30):
             "seeders": seeders,
             "leechers": leechers,
             "popularity": 0,
-            "source": "API personalizzata",
+            "source": source_name,
             "magnet": magnet,
             "torrent_url": (torrent_url
                             if isinstance(torrent_url, str)
@@ -2737,21 +3094,117 @@ def _torrent_search_custom(api_url, query, session, limit=30):
     return results[:limit]
 
 
-def search_public_torrents(query, limit=60, custom_api=None):
-    """Cerca su fonti legali e sull'eventuale API scelta dall'utente."""
+_QUERY_PLACEHOLDER = re.compile(r"\[QUERY\]", re.IGNORECASE)
+
+
+def _torrent_search_api_url(api_url, query):
+    encoded = urllib.parse.quote_plus(query)
+    if "{query}" in api_url:
+        return api_url.replace("{query}", encoded)
+    if _QUERY_PLACEHOLDER.search(api_url):
+        return _QUERY_PLACEHOLDER.sub(lambda _match: encoded, api_url)
+    return api_url + ("&" if "?" in api_url else "?") + "q=" + encoded
+
+
+def test_torrent_search_api(api_url, session=None):
+    """Verifica che l'API risponda con JSON nel formato supportato.
+
+    Restituisce ``{"ok": bool, "results": int, "error": codice, "detail": testo}``.
+    """
+    api_url = (api_url or "").strip()
+    if not api_url:
+        return {"ok": False, "results": 0, "error": "missing", "detail": ""}
+    placeholder = None
+    for match in re.finditer(r"\[[A-Za-z0-9_]+\]", api_url):
+        if match.group(0).casefold() != "[query]":
+            placeholder = match
+            break
+    if placeholder is not None:
+        return {"ok": False, "results": 0, "error": "placeholder",
+                "detail": placeholder.group(0)}
+    try:
+        parsed = urllib.parse.urlsplit(api_url.replace("{query}", "test"))
+        if parsed.path in ("", "/") and not parsed.query:
+            return {"ok": False, "results": 0, "error": "homepage",
+                    "detail": ""}
+    except ValueError:
+        pass
+    own_session = session is None
+    session = session or make_http_session(api_url)
+    try:
+        response = session.get(_torrent_search_api_url(api_url, "test"),
+                               timeout=20, allow_redirects=True)
+        if response.status_code != 200:
+            return {"ok": False, "results": 0, "error": "http",
+                    "detail": str(response.status_code)}
+        content_type = response.headers.get("Content-Type", "").lower()
+        body = (response.text or "").lstrip()
+        if "json" not in content_type and not body.startswith(("{", "[")):
+            return {"ok": False, "results": 0, "error": "not_json", "detail": ""}
+        try:
+            payload = response.json()
+        except ValueError:
+            return {"ok": False, "results": 0, "error": "invalid_json",
+                    "detail": ""}
+        rows = payload
+        recognised = isinstance(payload, list)
+        if isinstance(payload, dict):
+            for key in ("results", "torrents", "data", "items", "hits"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    rows, recognised = value, True
+                    break
+                if (isinstance(value, dict)
+                        and isinstance(value.get("hits"), list)):
+                    rows, recognised = value["hits"], True
+                    break
+        if not recognised or not isinstance(rows, list):
+            return {"ok": False, "results": 0, "error": "format", "detail": ""}
+        valid_rows = 0
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            has_name = any(key in row for key in
+                           ("name", "title", "torrent_name"))
+            has_target = any(key in row for key in (
+                "magnet", "magnet_uri", "magnet_link", "infohash",
+                "info_hash", "hash", "torrent_url", "torrent", "url", "link"))
+            if has_name and has_target:
+                valid_rows += 1
+        if rows and not valid_rows:
+            return {"ok": False, "results": 0, "error": "empty", "detail": ""}
+        return {"ok": True, "results": valid_rows, "error": "", "detail": ""}
+    except Exception as exc:
+        return {"ok": False, "results": 0, "error": "network",
+                "detail": str(exc) or exc.__class__.__name__}
+    finally:
+        if own_session:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+
+def search_public_torrents(query, limit=60, custom_apis=None):
+    """Cerca su fonti legali e sulle API scelte dall'utente."""
     query = (query or "").strip()
     if not query:
         return []
-    if custom_api is None:
-        custom_api = load_torrent_search_api()
+    if custom_apis is None:
+        custom_apis = load_torrent_search_apis()
     session = make_http_session("https://archive.org/")
     merged = {}
     try:
         providers = [("Internet Archive", _torrent_search_internet_archive)]
-        if custom_api:
+        for api in custom_apis or ():
+            url = str(api.get("url") or "").strip()
+            name = str(api.get("name") or "API personalizzata").strip()
+            if not url:
+                continue
             providers.append((
-                "API personalizzata",
-                lambda q, s, n: _torrent_search_custom(custom_api, q, s, n)))
+                name,
+                lambda q, s, n, u=url, src=name:
+                    _torrent_search_custom(u, q, s, n, source_name=src)))
         for label, provider in providers:
             try:
                 rows = provider(query, session, 30)
@@ -4360,6 +4813,8 @@ class DownloaderApp:
         self._page_pending = set()
         self._page_scanned = set()
         self._cancelled_torrent_selections = set()
+        self._torrent_api_checks = {}
+        self._torrent_api_checking = set()
         # Sopprime solo i reinserimenti automatici ripetuti dello stesso clipboard.
         self._suppressed_clipboard_magnet = None
         self._auto_paste_last_value = None
@@ -4388,6 +4843,9 @@ class DownloaderApp:
         self.root.after(250, self._enable_torrent_drop)
         self.root.after(120, self._poll)
         self._restore_session()
+        # Controllo aggiornamenti silenzioso all'avvio: avvisa solo se esiste
+        # davvero una nuova versione.
+        self.root.after(3000, lambda: self._check_for_updates(silent=True))
 
     def _restore_session(self):
         """Ripristina una sessione precedente senza duplicare elementi."""
@@ -5003,10 +5461,7 @@ class DownloaderApp:
                                   highlightbackground=self.LINE, highlightthickness=1)
         self.side_menu_items = []
         for label, action in (("Impostazioni", self._open_settings),
-                              ("Apri file torrent", self._choose_torrent_files),
-                              ("Cookie host protetti", self._open_cookie_dialog),
-                              ("Svuota coda", self._remove_all),
-                              ("Chiudi", self._close_side_menu)):
+                              ("Cookie host protetti", self._open_cookie_dialog)):
             button = ttk.Button(self.side_menu, text=translate_ui(label, self.language),
                                 command=lambda callback=action: self._run_side_menu_action(callback))
             button.pack(fill="x", pady=2)
@@ -5179,6 +5634,22 @@ class DownloaderApp:
         footer.pack(fill="x", pady=(0, 16))
         tk.Label(footer, text=f"Version {APP_VERSION}",
                  bg=self.BG, fg="#929292", font=(APP_FONT_FAMILY, 9)).pack(side="left")
+        github_link = tk.Label(footer, text="GitHub", bg=self.BG,
+                               fg=self.ACCENT, cursor="hand2",
+                               font=(APP_FONT_FAMILY, 9, "underline"))
+        github_link.pack(side="left", padx=(10, 0))
+        github_link.bind("<Button-1>", lambda _event: self._open_github_page())
+        github_link.bind("<Enter>", lambda _event: github_link.configure(
+            fg=self.ACCENT_HOVER))
+        github_link.bind("<Leave>", lambda _event: github_link.configure(
+            fg=self.ACCENT))
+
+    @staticmethod
+    def _open_github_page():
+        try:
+            webbrowser.open(PROJECT_GITHUB_URL)
+        except Exception:
+            logging.exception("Impossibile aprire la pagina GitHub del progetto")
 
     def _toggle_side_menu(self):
         try:
@@ -5206,7 +5677,7 @@ class DownloaderApp:
                 if self.settings_window.winfo_exists(): self.settings_window.lift(); return
             except tk.TclError: pass
         window = tk.Toplevel(self.root); self.settings_window = window
-        window.title(translate_ui("Impostazioni", self.language)); window.geometry("760x520"); window.minsize(650, 470)
+        window.title(translate_ui("Impostazioni", self.language)); window.geometry("780x620"); window.minsize(680, 560)
         window.configure(bg=self.BG)
         shell = tk.Frame(window, bg=self.BG, padx=18, pady=18); shell.pack(fill="both", expand=True)
         left = tk.Frame(shell, bg=self.PANEL, width=205, padx=8, pady=8); left.pack(side="left", fill="y"); left.pack_propagate(False)
@@ -5248,37 +5719,81 @@ class DownloaderApp:
             tk.Label(self.settings_content,
                      text=translate_ui("FONTI DI RICERCA", self.language),
                      bg=self.BG, fg=self.TEXT,
-                     font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(0, 8))
+                     font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(0, 6))
             tk.Label(self.settings_content,
                      text=translate_ui(
                          "La ricerca torrent usa solo fonti legali: Internet Archive "
                          "(pubblico dominio, Creative Commons, software libero).",
                          self.language), bg=self.BG, fg=self.MUTED,
                      wraplength=470, justify="left", anchor="w",
-                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(0, 14))
+                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(0, 10))
             tk.Label(self.settings_content,
-                     text=translate_ui(
-                         "API di ricerca personalizzata (facoltativa)",
-                         self.language), bg=self.BG, fg=self.TEXT,
-                     font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(0, 6))
-            self.settings_vars["torrent_api"] = tk.StringVar(
-                value=load_torrent_search_api())
-            ttk.Entry(self.settings_content,
-                      textvariable=self.settings_vars["torrent_api"],
-                      style="Settings.TEntry").pack(fill="x", pady=(0, 6))
-            tk.Label(self.settings_content,
-                     text=translate_ui(
-                         "URL dell'API con {query} al posto del testo cercato. "
-                         "La risposta deve essere JSON: elenco di risultati con "
-                         "name, size, seeders, leechers e magnet oppure torrent_url.",
-                         self.language), bg=self.BG, fg=self.MUTED,
-                     wraplength=470, justify="left", anchor="w",
-                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(0, 8))
-            tk.Label(self.settings_content,
-                     text=translate_ui("Lascia vuoto per usare solo Internet Archive.",
-                                       self.language),
+                     text=translate_ui("Aggiungi un'API di ricerca", self.language),
+                     bg=self.BG, fg=self.TEXT,
+                     font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(0, 4))
+            add_row = tk.Frame(self.settings_content, bg=self.BG)
+            add_row.pack(fill="x", pady=(0, 4))
+            self.settings_vars["torrent_api_input"] = tk.StringVar()
+            ttk.Entry(add_row,
+                      textvariable=self.settings_vars["torrent_api_input"],
+                      style="Settings.TEntry").pack(side="left", fill="x",
+                                                   expand=True)
+            ttk.Button(add_row, text=translate_ui("Cerca e aggiungi",
+                                                  self.language),
+                       command=self._add_torrent_search_api).pack(
+                           side="left", padx=(8, 0))
+            self.torrent_api_status = tk.StringVar(value="")
+            tk.Label(self.settings_content, textvariable=self.torrent_api_status,
                      bg=self.BG, fg=self.MUTED, wraplength=470, justify="left",
-                     anchor="w", font=(APP_FONT_FAMILY, 9)).pack(anchor="w")
+                     anchor="w", font=(APP_FONT_FAMILY, 9)).pack(
+                         fill="x", pady=(0, 4))
+            table_wrap = tk.Frame(self.settings_content, bg=self.ROW,
+                                  highlightbackground=self.LINE,
+                                  highlightthickness=1)
+            table_wrap.pack(fill="both", expand=True, pady=(0, 6))
+            self.torrent_api_table = ttk.Treeview(
+                table_wrap, columns=("name", "url", "status"), show="headings",
+                height=4, style="NoArrow.Treeview")
+            self.torrent_api_table.heading(
+                "name", text=translate_ui("NOME", self.language), anchor="w")
+            self.torrent_api_table.heading(
+                "url", text=translate_ui("API", self.language), anchor="w")
+            self.torrent_api_table.heading(
+                "status", text=translate_ui("STATO", self.language), anchor="w")
+            self.torrent_api_table.column("name", width=120, minwidth=90,
+                                          anchor="w", stretch=False)
+            self.torrent_api_table.column("url", width=240, minwidth=150,
+                                          anchor="w", stretch=True)
+            self.torrent_api_table.column("status", width=100, minwidth=80,
+                                          anchor="w", stretch=False)
+            self.torrent_api_table.tag_configure("ok", foreground="#39d353")
+            self.torrent_api_table.tag_configure("error",
+                                                 foreground="#ff5a3c")
+            self.torrent_api_table.tag_configure("pending",
+                                                 foreground=self.MUTED)
+            api_scrollbar = FluidScrollbar(
+                table_wrap, orient="vertical",
+                command=self.torrent_api_table.yview)
+            self.torrent_api_table.configure(yscrollcommand=api_scrollbar.set)
+            api_scrollbar.pack(side="right", fill="y")
+            self.torrent_api_table.pack(side="left", fill="both", expand=True)
+            api_buttons = tk.Frame(self.settings_content, bg=self.BG)
+            api_buttons.pack(fill="x", pady=(0, 6))
+            ttk.Button(api_buttons, text=translate_ui("Rimuovi", self.language),
+                       command=self._remove_torrent_search_api).pack(side="left")
+            ttk.Button(api_buttons, text=translate_ui("Verifica", self.language),
+                       command=self._verify_torrent_search_api).pack(
+                           side="left", padx=(6, 0))
+            tk.Label(self.settings_content,
+                     text=translate_ui(
+                         "Scrivi il nome di un servizio noto (es. Internet Archive) "
+                         "oppure il dominio/URL completo dell'API. Se l'API non viene "
+                         "trovata, incolla l'URL con {query} o [QUERY] al posto del "
+                         "testo cercato.", self.language), bg=self.BG, fg=self.MUTED,
+                     wraplength=470, justify="left", anchor="w",
+                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w")
+            self._refresh_torrent_api_table()
+            self._auto_check_torrent_search_apis()
         elif category == "Informazioni":
             info_grid = tk.Frame(self.settings_content, bg=self.BG)
             info_grid.pack(anchor="w", pady=(0, 16))
@@ -5383,8 +5898,273 @@ class DownloaderApp:
             self.settings_vars["connections"] = tk.IntVar(value=limits["connections_limit"])
             ttk.Spinbox(row,from_=1,to=1000,width=8,textvariable=self.settings_vars["connections"],
                         style="Settings.TSpinbox").pack(side="left")
-        if category != "Informazioni":
+        if category not in ("Informazioni", "Torrent"):
             ttk.Button(self.settings_content, text=translate_ui("Applica", self.language), command=self._apply_settings).pack(anchor="w", pady=(16, 0))
+
+    def _set_torrent_api_status(self, text):
+        variable = getattr(self, "torrent_api_status", None)
+        if variable is not None:
+            try:
+                variable.set(text)
+            except tk.TclError:
+                pass
+
+    def _refresh_torrent_api_table(self):
+        tree = getattr(self, "torrent_api_table", None)
+        if tree is None:
+            return
+        try:
+            for iid in tree.get_children():
+                tree.delete(iid)
+            self._torrent_api_rows = {}
+            tree.insert("", "end", iid="builtin-internet-archive",
+                        values=("Internet Archive",
+                                translate_ui("Integrata", self.language), "OK"),
+                        tags=("ok",))
+            for api in load_torrent_search_apis():
+                url = api["url"]
+                if url in self._torrent_api_checking:
+                    status, tag = "Verifica…", "pending"
+                else:
+                    check = self._torrent_api_checks.get(url) or {}
+                    state = check.get("state")
+                    if state == "ok":
+                        status, tag = "OK", "ok"
+                    elif state == "error":
+                        status, tag = "Errore", "error"
+                    else:
+                        status, tag = "Non verificata", "pending"
+                iid = tree.insert(
+                    "", "end",
+                    values=(api["name"], url,
+                            translate_ui(status, self.language)),
+                    tags=(tag,))
+                self._torrent_api_rows[iid] = api
+        except tk.TclError:
+            pass
+
+    def _auto_check_torrent_search_apis(self):
+        now = time.time()
+        for api in load_torrent_search_apis():
+            check = self._torrent_api_checks.get(api["url"])
+            if check and now - check.get("at", 0) < 300:
+                continue
+            self._start_torrent_api_check(api)
+
+    def _start_torrent_api_check(self, api):
+        url = str(api.get("url") or "").strip()
+        if not url or url in self._torrent_api_checking:
+            return
+        self._torrent_api_checking.add(url)
+        self._torrent_api_checks[url] = {"state": "pending", "detail": "",
+                                         "at": time.time()}
+        self._refresh_torrent_api_table()
+        threading.Thread(target=self._torrent_api_check_worker, args=(api,),
+                         name="torrent-api-check", daemon=True).start()
+
+    def _torrent_api_check_worker(self, api):
+        result = test_torrent_search_api(api.get("url"))
+        self.events.put(("torrent_api_check",
+                         str(api.get("name") or api.get("url") or ""),
+                         str(api.get("url") or ""), result))
+
+    def _torrent_api_error_text(self, result):
+        code = result.get("error") or ""
+        detail = str(result.get("detail") or "").strip()
+        if code == "http":
+            text = f"HTTP {detail}." if detail else translate_ui(
+                "Risposta HTTP non valida.", self.language)
+            return text
+        if code == "network":
+            prefix = translate_ui("Errore di rete:", self.language)
+            return f"{prefix} {detail}" if detail else translate_ui(
+                "Errore di rete.", self.language)
+        text = {
+            "missing": "URL mancante.",
+            "not_json": "La risposta non è JSON.",
+            "invalid_json": "JSON non valido.",
+            "format": "Formato JSON non riconosciuto.",
+            "empty": "Nessun risultato nel formato atteso.",
+            "homepage": "Questo è un sito, non un endpoint API.",
+        }.get(code, "Verifica non riuscita.")
+        if code == "placeholder":
+            return translate_ui(
+                "Segnaposto {0} non supportato: usa {query} o [QUERY].",
+                self.language).replace("{0}", detail)
+        return translate_ui(text, self.language)
+
+    def _finish_torrent_api_check(self, name, url, result):
+        self._torrent_api_checking.discard(url)
+        ok = bool(result.get("ok"))
+        self._torrent_api_checks[url] = {
+            "state": "ok" if ok else "error",
+            "detail": str(result.get("detail") or ""),
+            "error": str(result.get("error") or ""),
+            "at": time.time(),
+        }
+        try:
+            window = getattr(self, "settings_window", None)
+            alive = bool(window is not None and window.winfo_exists())
+        except tk.TclError:
+            alive = False
+        if not alive or getattr(self, "settings_current_category", "") != "Torrent":
+            return
+        self._refresh_torrent_api_table()
+        if ok:
+            message = f"{name}: {translate_ui('Funzionante', self.language)}"
+        else:
+            message = (f"{name}: {translate_ui('Non funzionante', self.language)}"
+                       f" — {self._torrent_api_error_text(result)}")
+        self._set_torrent_api_status(message)
+
+    def _verify_torrent_search_api(self):
+        tree = getattr(self, "torrent_api_table", None)
+        if tree is None:
+            return
+        selection = tree.selection()
+        if not selection:
+            self._set_torrent_api_status(translate_ui(
+                "Seleziona un'API da verificare.", self.language))
+            return
+        tags = tree.item(selection[0], "tags") or ()
+        if selection[0] == "builtin-internet-archive":
+            self._set_torrent_api_status(translate_ui(
+                "Internet Archive è sempre attivo.", self.language))
+            return
+        api = getattr(self, "_torrent_api_rows", {}).get(selection[0])
+        if api is None:
+            return
+        self._torrent_api_checks.pop(api["url"], None)
+        self._start_torrent_api_check(api)
+        self._set_torrent_api_status(translate_ui("Verifica in corso…",
+                                                  self.language))
+
+    def _add_torrent_search_api(self):
+        variable = self.settings_vars.get("torrent_api_input")
+        text = variable.get().strip() if variable is not None else ""
+        if not text:
+            self._set_torrent_api_status(translate_ui(
+                "Scrivi il nome o l'URL dell'API.", self.language))
+            return
+        resolved = resolve_torrent_search_api(text)
+        if resolved is not None:
+            if resolved["builtin"]:
+                self._set_torrent_api_status(translate_ui(
+                    "Internet Archive è già integrato.", self.language))
+                return
+            self._store_torrent_search_api(resolved["name"], resolved["url"])
+            return
+        if looks_like_domain(text):
+            self._start_torrent_api_probe(text)
+            return
+        self._set_torrent_api_status(translate_ui(
+            "Servizio non riconosciuto. Inserisci il dominio o l'URL completo dell'API.",
+            self.language))
+
+    def _store_torrent_search_api(self, name, url):
+        apis = load_torrent_search_apis()
+        normalized = (url or "").strip()
+        if any(api["url"].strip().casefold() == normalized.casefold()
+               for api in apis):
+            self._set_torrent_api_status(translate_ui(
+                "API già aggiunta.", self.language))
+            return
+        apis.append({"name": (name or normalized).strip(), "url": normalized})
+        try:
+            save_torrent_search_apis(apis)
+        except (OSError, ValueError):
+            logging.exception("Impossibile salvare l'API di ricerca torrent")
+            self._set_torrent_api_status(translate_ui(
+                "Impossibile salvare l'API.", self.language))
+            return
+        if variable := self.settings_vars.get("torrent_api_input"):
+            try:
+                variable.set("")
+            except tk.TclError:
+                pass
+        self._refresh_torrent_api_table()
+        self._set_torrent_api_status(translate_ui("API aggiunta.",
+                                                  self.language))
+        for api in load_torrent_search_apis():
+            if api["url"].strip().casefold() == normalized.casefold():
+                self._start_torrent_api_check(api)
+                break
+
+    def _start_torrent_api_probe(self, value):
+        if getattr(self, "_torrent_api_probe_running", False):
+            return
+        self._torrent_api_probe_running = True
+        self._set_torrent_api_status(translate_ui("Ricerca API…",
+                                                  self.language))
+        threading.Thread(target=self._torrent_api_probe_worker,
+                         args=(value,), name="torrent-api-probe",
+                         daemon=True).start()
+
+    def _torrent_api_probe_worker(self, value):
+        url = ""
+        error = ""
+        try:
+            url = probe_torrent_search_api(value)
+            if not url:
+                error = translate_ui("API non trovata per questo servizio.",
+                                     self.language)
+        except Exception as exc:
+            error = str(exc) or exc.__class__.__name__
+        self.events.put(("torrent_api_probe", value, url, error))
+
+    def _finish_torrent_api_probe(self, value, url, error):
+        self._torrent_api_probe_running = False
+        try:
+            window = getattr(self, "settings_window", None)
+            alive = bool(window is not None and window.winfo_exists())
+        except tk.TclError:
+            alive = False
+        if not alive or getattr(self, "settings_current_category", "") != "Torrent":
+            return
+        if url:
+            try:
+                host = urllib.parse.urlsplit(
+                    url.replace("{query}", "test")).netloc
+            except ValueError:
+                host = ""
+            self._store_torrent_search_api(host or value, url)
+        else:
+            self._set_torrent_api_status(
+                error or translate_ui("API non trovata per questo servizio.",
+                                      self.language))
+
+    def _remove_torrent_search_api(self):
+        tree = getattr(self, "torrent_api_table", None)
+        if tree is None:
+            return
+        selection = tree.selection()
+        if not selection:
+            self._set_torrent_api_status(translate_ui(
+                "Seleziona un'API da rimuovere.", self.language))
+            return
+        tags = tree.item(selection[0], "tags") or ()
+        if selection[0] == "builtin-internet-archive":
+            self._set_torrent_api_status(translate_ui(
+                "La fonte integrata non può essere rimossa.", self.language))
+            return
+        api = getattr(self, "_torrent_api_rows", {}).get(selection[0])
+        if api is None:
+            return
+        apis = [row for row in load_torrent_search_apis()
+                if row["url"].strip().casefold()
+                != api["url"].strip().casefold()]
+        try:
+            save_torrent_search_apis(apis)
+        except (OSError, ValueError):
+            logging.exception("Impossibile rimuovere l'API di ricerca torrent")
+            self._set_torrent_api_status(translate_ui(
+                "Impossibile salvare l'API.", self.language))
+            return
+        self._refresh_torrent_api_table()
+        self._set_torrent_api_status(translate_ui("API rimossa.",
+                                                  self.language))
+        self._torrent_api_checks.pop(api["url"], None)
+        self._torrent_api_checking.discard(api["url"])
 
     def _apply_settings(self):
         category = getattr(self, "settings_current_category", "Download")
@@ -5393,8 +6173,6 @@ class DownloaderApp:
                 self._change_language(self.settings_vars["language"].get())
                 return
             if category == "Torrent":
-                save_torrent_search_api(
-                    self.settings_vars["torrent_api"].get())
                 return
             if category == "Download":
                 raw_folder = self.settings_vars["download_directory"].get().strip()
@@ -5444,13 +6222,17 @@ class DownloaderApp:
             except tk.TclError:
                 pass
 
-    def _check_for_updates(self):
+    def _check_for_updates(self, silent=False):
         if getattr(self, "_update_check_running", False):
+            if not silent:
+                self._update_check_silent = False
             return
         self._update_check_running = True
+        self._update_check_silent = bool(silent)
         self._set_update_button_enabled(False)
-        self._set_update_status(
-            translate_ui("Controllo aggiornamenti…", self.language))
+        if not silent:
+            self._set_update_status(
+                translate_ui("Controllo aggiornamenti…", self.language))
         threading.Thread(target=self._fetch_update_info, name="update-check",
                          daemon=True).start()
 
@@ -5465,18 +6247,26 @@ class DownloaderApp:
         self.events.put(("update_check_result", info, error))
 
     def _finish_update_check(self, info, error):
+        silent = bool(getattr(self, "_update_check_silent", False))
+        self._update_check_silent = False
         self._update_check_running = False
         self._set_update_button_enabled(True)
         if error:
             message = translate_ui("Impossibile controllare gli aggiornamenti.",
                                    self.language)
+            if silent:
+                logging.info("Controllo aggiornamenti all'avvio non riuscito: %s",
+                             error)
+                return
             self._set_update_status(message)
             messagebox.showerror(translate_ui("Aggiornamento", self.language),
                                  f"{message}\n{error}", parent=self.root)
             return
         if not info:
-            self._set_update_status(
-                translate_ui("Nessun aggiornamento disponibile.", self.language))
+            if not silent:
+                self._set_update_status(
+                    translate_ui("Nessun aggiornamento disponibile.",
+                                 self.language))
             return
         self._set_update_status(
             translate_ui("Nuova versione disponibile: {0}", self.language).format(
@@ -6644,8 +7434,8 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                  fg=self.MUTED, font=(APP_FONT_FAMILY, 9),
                  anchor="w").pack(fill="x")
         tk.Label(body, text=translate_ui(
-            "Fonti legali: Internet Archive (pubblico dominio, Creative Commons, "
-            "software libero) e l'API configurata nelle impostazioni Torrent.",
+            "Il programma permette di default solo ricerche su fonti legali, "
+            "eventuali usi non consoni sono un problema dell'utente.",
             self.language), bg=self.PANEL, fg=self.MUTED,
             font=(APP_FONT_FAMILY, 8), wraplength=860,
             justify="left", anchor="w").pack(fill="x", pady=(2, 0))
@@ -8520,6 +9310,14 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                 elif event[0] == "torrent_search_result":
                     _kind, search_results, search_error = event
                     self._finish_torrent_search(search_results, search_error)
+                elif event[0] == "torrent_api_probe":
+                    _kind, probe_value, probe_url, probe_error = event
+                    self._finish_torrent_api_probe(probe_value, probe_url,
+                                                   probe_error)
+                elif event[0] == "torrent_api_check":
+                    _kind, check_name, check_url, check_result = event
+                    self._finish_torrent_api_check(check_name, check_url,
+                                                   check_result)
                 elif event[0] == "torrent_file_ready":
                     _kind, path, name, error = event
                     status = getattr(self, "torrent_search_status", None)
