@@ -30,7 +30,6 @@ import tempfile
 import threading
 import time
 import zlib
-import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import urllib.error
 import urllib.parse
@@ -964,6 +963,20 @@ def save_download_limits_config(download_rate_limit, upload_rate_limit, connecti
         raise ValueError("Invalid download limits")
     _write_app_config(values, path)
 
+
+def load_torrent_search_api(path=LANGUAGE_CONFIG_PATH):
+    value = _read_app_config(path).get("torrent_search_api", "")
+    return value if isinstance(value, str) else ""
+
+
+def save_torrent_search_api(url, path=LANGUAGE_CONFIG_PATH):
+    value = (url or "").strip()
+    if value:
+        parsed = urllib.parse.urlsplit(value.replace("{query}", "test"))
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError("Invalid torrent search API URL")
+    _write_app_config({"torrent_search_api": value}, path)
+
 class SharedDownloadThrottle:
     """Byte-rate limiter shared by all active HTTP transfer threads."""
     def __init__(self): self._lock = threading.Lock(); self._rate = 0; self._next = 0.0
@@ -1210,6 +1223,83 @@ ES_STRINGS["Attenzione: il torrent contiene la stagione {found}, non la stagione
     "Atención: el torrent contiene la temporada {found}, no la temporada {expected}.")
 FR_STRINGS["Attenzione: il torrent contiene la stagione {found}, non la stagione {expected}."] = (
     "Attention : ce torrent contient la saison {found}, pas la saison {expected}.")
+
+UI_STRINGS["FONTI DI RICERCA"] = ("SEARCH SOURCES", "SUCHQUELLEN")
+ES_STRINGS["FONTI DI RICERCA"] = "FUENTES DE BÚSQUEDA"
+FR_STRINGS["FONTI DI RICERCA"] = "SOURCES DE RECHERCHE"
+
+UI_STRINGS["La ricerca torrent usa solo fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero)."] = (
+    "Torrent search uses legal sources only: Internet Archive (public domain, "
+    "Creative Commons, free software).",
+    "Die Torrent-Suche verwendet nur legale Quellen: Internet Archive "
+    "(Gemeinfreiheit, Creative Commons, freie Software).")
+ES_STRINGS["La ricerca torrent usa solo fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero)."] = (
+    "La búsqueda de torrents usa solo fuentes legales: Internet Archive "
+    "(dominio público, Creative Commons, software libre).")
+FR_STRINGS["La ricerca torrent usa solo fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero)."] = (
+    "La recherche de torrents n'utilise que des sources légales : Internet Archive "
+    "(domaine public, Creative Commons, logiciels libres).")
+
+UI_STRINGS["API di ricerca personalizzata (facoltativa)"] = (
+    "Custom search API (optional)", "Benutzerdefinierte Such-API (optional)")
+ES_STRINGS["API di ricerca personalizzata (facoltativa)"] = (
+    "API de búsqueda personalizada (opcional)")
+FR_STRINGS["API di ricerca personalizzata (facoltativa)"] = (
+    "API de recherche personnalisée (facultative)")
+
+UI_STRINGS["URL dell'API con {query} al posto del testo cercato. La risposta deve essere JSON: elenco di risultati con name, size, seeders, leechers e magnet oppure torrent_url."] = (
+    "API URL with {query} in place of the search text. The response must be JSON: "
+    "a list of results with name, size, seeders, leechers and magnet or torrent_url.",
+    "API-URL mit {query} anstelle des Suchtexts. Die Antwort muss JSON sein: eine "
+    "Liste von Ergebnissen mit name, size, seeders, leechers und magnet oder torrent_url.")
+ES_STRINGS["URL dell'API con {query} al posto del testo cercato. La risposta deve essere JSON: elenco di risultati con name, size, seeders, leechers e magnet oppure torrent_url."] = (
+    "URL de la API con {query} en lugar del texto buscado. La respuesta debe ser JSON: "
+    "una lista de resultados con name, size, seeders, leechers y magnet o torrent_url.")
+FR_STRINGS["URL dell'API con {query} al posto del testo cercato. La risposta deve essere JSON: elenco di risultati con name, size, seeders, leechers e magnet oppure torrent_url."] = (
+    "URL de l'API avec {query} à la place du texte recherché. La réponse doit être "
+    "du JSON : une liste de résultats avec name, size, seeders, leechers et magnet ou torrent_url.")
+
+UI_STRINGS["Lascia vuoto per usare solo Internet Archive."] = (
+    "Leave empty to use Internet Archive only.",
+    "Leer lassen, um nur Internet Archive zu verwenden.")
+ES_STRINGS["Lascia vuoto per usare solo Internet Archive."] = (
+    "Déjalo vacío para usar solo Internet Archive.")
+FR_STRINGS["Lascia vuoto per usare solo Internet Archive."] = (
+    "Laissez vide pour utiliser uniquement Internet Archive.")
+
+UI_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e l'API configurata nelle impostazioni Torrent."] = (
+    "Legal sources: Internet Archive (public domain, Creative Commons, free software) "
+    "and the API configured in the Torrent settings.",
+    "Legale Quellen: Internet Archive (Gemeinfreiheit, Creative Commons, freie Software) "
+    "und die in den Torrent-Einstellungen konfigurierte API.")
+ES_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e l'API configurata nelle impostazioni Torrent."] = (
+    "Fuentes legales: Internet Archive (dominio público, Creative Commons, software libre) "
+    "y la API configurada en los ajustes de Torrent.")
+FR_STRINGS["Fonti legali: Internet Archive (pubblico dominio, Creative Commons, software libero) e l'API configurata nelle impostazioni Torrent."] = (
+    "Sources légales : Internet Archive (domaine public, Creative Commons, logiciels libres) "
+    "et l'API configurée dans les paramètres Torrent.")
+
+UI_STRINGS["Download del file torrent…"] = (
+    "Downloading torrent file…", "Torrent-Datei wird heruntergeladen…")
+ES_STRINGS["Download del file torrent…"] = "Descargando archivo torrent…"
+FR_STRINGS["Download del file torrent…"] = "Téléchargement du fichier torrent…"
+
+UI_STRINGS["Impossibile scaricare il file torrent."] = (
+    "Could not download the torrent file.", "Torrent-Datei konnte nicht heruntergeladen werden.")
+ES_STRINGS["Impossibile scaricare il file torrent."] = (
+    "No se pudo descargar el archivo torrent.")
+FR_STRINGS["Impossibile scaricare il file torrent."] = (
+    "Impossible de télécharger le fichier torrent.")
+
+UI_STRINGS["Risultato non valido."] = (
+    "Invalid result.", "Ungültiges Ergebnis.")
+ES_STRINGS["Risultato non valido."] = "Resultado no válido."
+FR_STRINGS["Risultato non valido."] = "Résultat non valide."
+
+UI_STRINGS["API personalizzata"] = (
+    "Custom API", "Benutzerdefinierte API")
+ES_STRINGS["API personalizzata"] = "API personalizada"
+FR_STRINGS["API personalizzata"] = "API personnalisée"
 
 
 def translate_ui(text, language):
@@ -2495,152 +2585,199 @@ def _torrent_magnet(info_hash, name):
             f"&dn={urllib.parse.quote(name or '', safe='')}{trackers}")
 
 
-def _torrent_search_apibay(query, session, limit=30):
-    """Risultati da The Pirate Bay (API pubblica apibay.org)."""
-    response = session.get("https://apibay.org/q.php",
-                           params={"q": query, "cat": "0"}, timeout=20)
-    response.raise_for_status()
-    rows = response.json()
+def _torrent_search_int(value, default=0):
+    try:
+        if isinstance(value, bool):
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _torrent_search_first(row, names):
+    for name in names:
+        if name in row and row[name] not in (None, ""):
+            return row[name]
+    return None
+
+
+def _torrent_search_internet_archive(query, session, limit=30):
+    """Risultati da Internet Archive: pubblico dominio, CC e software libero.
+
+    Internet Archive è una fonte legale e non bloccata in Italia; i torrent
+    pubblicati riguardano opere libere o comunque ospitate dalla piattaforma.
+    """
+    safe_query = (query or "").replace("\\", " ").replace('"', " ").strip()
+    params = {
+        "fl[]": ["identifier", "title", "item_size", "downloads"],
+        "rows": max(1, int(limit)),
+        "page": 1,
+        "output": "json",
+    }
+    queries = [f'format:("Archive BitTorrent") AND title:("{safe_query}")']
+    if safe_query:
+        queries.append(f'format:("Archive BitTorrent") AND ({safe_query})')
+    docs = []
+    for search_query in queries:
+        response = session.get(
+            "https://archive.org/advancedsearch.php",
+            params={**params, "q": search_query}, timeout=25)
+        response.raise_for_status()
+        payload = response.json()
+        docs = ((payload or {}).get("response") or {}).get("docs") or []
+        if docs:
+            break
     results = []
-    for row in rows or []:
-        if not isinstance(row, dict):
+    for doc in docs:
+        if not isinstance(doc, dict):
             continue
-        info_hash = str(row.get("info_hash") or "").strip()
-        if not re.fullmatch(r"[0-9A-Fa-f]{40}", info_hash):
+        identifier = str(doc.get("identifier") or "").strip()
+        if not identifier:
             continue
-        name = html_module.unescape(str(row.get("name") or "")).strip()
-        try:
-            size = int(row.get("size") or 0)
-            seeders = int(row.get("seeders") or 0)
-            leechers = int(row.get("leechers") or 0)
-        except (TypeError, ValueError):
-            continue
+        name = html_module.unescape(
+            str(doc.get("title") or identifier)).strip()
+        torrent_name = f"{identifier}_archive.torrent"
+        torrent_url = ("https://archive.org/download/"
+                       f"{urllib.parse.quote(identifier, safe='')}/"
+                       f"{urllib.parse.quote(torrent_name, safe='')}")
         results.append({
-            "infohash": info_hash.lower(),
-            "name": name,
-            "size": size,
-            "seeders": seeders,
-            "leechers": leechers,
-            "source": "The Pirate Bay",
-            "magnet": _torrent_magnet(info_hash, name),
+            "infohash": "",
+            "name": name or identifier,
+            "size": _torrent_search_int(doc.get("item_size"), 0),
+            "seeders": None,
+            "leechers": None,
+            "popularity": _torrent_search_int(doc.get("downloads"), 0),
+            "source": "Internet Archive",
+            "magnet": None,
+            "torrent_url": torrent_url,
+            "identifier": identifier,
         })
     return results[:limit]
 
 
-def _torrent_search_torrents_csv(query, session, limit=30):
-    """Risultati dall'indice pubblico Torrents-CSV."""
-    response = session.get("https://torrents-csv.com/service/search",
-                           params={"q": query, "size": limit}, timeout=20)
+def _torrent_search_custom(api_url, query, session, limit=30):
+    """Risultati dall'API JSON scelta dall'utente nelle impostazioni."""
+    api_url = (api_url or "").strip()
+    if not api_url:
+        return []
+    encoded = urllib.parse.quote_plus(query)
+    if "{query}" in api_url:
+        url = api_url.replace("{query}", encoded)
+    else:
+        url = api_url + ("&" if "?" in api_url else "?") + "q=" + encoded
+    response = session.get(url, timeout=25)
     response.raise_for_status()
     payload = response.json()
-    rows = payload.get("torrents") if isinstance(payload, dict) else payload
+    rows = payload
+    if isinstance(payload, dict):
+        rows = []
+        for key in ("results", "torrents", "data", "items", "hits"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                rows = value
+                break
+            if isinstance(value, dict) and isinstance(value.get("hits"), list):
+                rows = value["hits"]
+                break
     results = []
-    for row in rows or []:
+    for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict):
             continue
-        info_hash = str(row.get("infohash") or "").strip()
-        if not re.fullmatch(r"[0-9A-Fa-f]{40}", info_hash):
+        name = str(_torrent_search_first(
+            row, ("name", "title", "torrent_name")) or "").strip()
+        size = _torrent_search_int(_torrent_search_first(
+            row, ("size", "size_bytes", "length", "total_size", "bytes")), 0)
+        seeders = _torrent_search_int(
+            _torrent_search_first(row, ("seeders", "seeds", "seed")), None)
+        leechers = _torrent_search_int(
+            _torrent_search_first(row, ("leechers", "peers", "peer")), None)
+        magnet = _torrent_search_first(
+            row, ("magnet", "magnet_uri", "magnet_link"))
+        infohash = str(_torrent_search_first(
+            row, ("infohash", "info_hash", "hash")) or "").strip()
+        torrent_url = _torrent_search_first(
+            row, ("torrent_url", "torrent"))
+        if not torrent_url:
+            candidate = _torrent_search_first(row, ("url", "link"))
+            if (isinstance(candidate, str)
+                    and candidate.lower().startswith(("http://", "https://"))
+                    and ".torrent" in candidate.lower()):
+                torrent_url = candidate
+        if isinstance(magnet, str) and magnet.lower().startswith("magnet:?"):
+            parsed = parse_magnet_uri(magnet)
+            if not parsed:
+                continue
+            infohash = parsed.get("info_hash") or infohash
+            if not name:
+                name = parsed.get("name") or ""
+        elif re.fullmatch(r"[0-9A-Fa-f]{40}|[A-Z2-7a-z2-7]{32}", infohash):
+            magnet = _torrent_magnet(infohash, name)
+        elif isinstance(torrent_url, str) and torrent_url.lower().startswith(
+                ("http://", "https://")):
+            magnet = None
+        else:
             continue
-        name = html_module.unescape(str(row.get("name") or "")).strip()
-        try:
-            size = int(row.get("size_bytes") or 0)
-            seeders = int(row.get("seeders") or 0)
-            leechers = int(row.get("leechers") or 0)
-        except (TypeError, ValueError):
-            continue
+        if not name:
+            name = infohash or "Torrent"
         results.append({
-            "infohash": info_hash.lower(),
-            "name": name,
-            "size": size,
+            "infohash": (infohash or "").lower(),
+            "name": html_module.unescape(name)[:300],
+            "size": max(0, size or 0),
             "seeders": seeders,
             "leechers": leechers,
-            "source": "Torrents-CSV",
-            "magnet": _torrent_magnet(info_hash, name),
+            "popularity": 0,
+            "source": "API personalizzata",
+            "magnet": magnet,
+            "torrent_url": (torrent_url
+                            if isinstance(torrent_url, str)
+                            and torrent_url.lower().startswith(("http://", "https://"))
+                            else None),
+            "identifier": "",
         })
     return results[:limit]
 
 
-def _parse_size_text(text):
-    match = re.search(r"([\d.]+)\s*([KMGT]?i?B)", text or "", re.I)
-    if not match:
-        return 0
-    try:
-        value = float(match.group(1))
-    except ValueError:
-        return 0
-    unit = match.group(2).upper()
-    factors = {
-        "B": 1, "KB": 1024, "KIB": 1024, "MB": 1024 ** 2,
-        "MIB": 1024 ** 2, "GB": 1024 ** 3, "GIB": 1024 ** 3,
-        "TB": 1024 ** 4, "TIB": 1024 ** 4,
-    }
-    return int(value * factors.get(unit, 1))
-
-
-def _torrent_search_nyaa(query, session, limit=30):
-    """Risultati dal feed RSS pubblico di Nyaa."""
-    response = session.get("https://nyaa.si/", params={
-        "page": "rss", "q": query, "c": "0_0", "f": "0"}, timeout=20)
-    response.raise_for_status()
-    root = ET.fromstring(response.content)
-    namespace = {"nyaa": "https://nyaa.si/xmlns/nyaa"}
-    results = []
-    for item in root.findall("./channel/item")[:limit]:
-        title = (item.findtext("title") or "").strip()
-        info_hash = (item.findtext("nyaa:infoHash", default="",
-                                   namespaces=namespace) or "").strip()
-        if not re.fullmatch(r"[0-9A-Fa-f]{40}", info_hash):
-            continue
-        try:
-            seeders = int(item.findtext("nyaa:seeders", default="0",
-                                        namespaces=namespace) or 0)
-            leechers = int(item.findtext("nyaa:leechers", default="0",
-                                         namespaces=namespace) or 0)
-        except (TypeError, ValueError):
-            seeders = leechers = 0
-        size = _parse_size_text(
-            item.findtext("nyaa:size", default="", namespaces=namespace))
-        results.append({
-            "infohash": info_hash.lower(),
-            "name": title,
-            "size": size,
-            "seeders": seeders,
-            "leechers": leechers,
-            "source": "Nyaa",
-            "magnet": _torrent_magnet(info_hash, title),
-        })
-    return results[:limit]
-
-
-def search_public_torrents(query, limit=60):
-    """Cerca su più fonti pubbliche e unisce i risultati per hash."""
+def search_public_torrents(query, limit=60, custom_api=None):
+    """Cerca su fonti legali e sull'eventuale API scelta dall'utente."""
     query = (query or "").strip()
     if not query:
         return []
-    session = make_http_session("https://apibay.org/")
+    if custom_api is None:
+        custom_api = load_torrent_search_api()
+    session = make_http_session("https://archive.org/")
     merged = {}
     try:
-        for _label, provider in (
-                ("The Pirate Bay", _torrent_search_apibay),
-                ("Torrents-CSV", _torrent_search_torrents_csv),
-                ("Nyaa", _torrent_search_nyaa)):
+        providers = [("Internet Archive", _torrent_search_internet_archive)]
+        if custom_api:
+            providers.append((
+                "API personalizzata",
+                lambda q, s, n: _torrent_search_custom(custom_api, q, s, n)))
+        for label, provider in providers:
             try:
                 rows = provider(query, session, 30)
             except Exception as exc:
-                logging.info("Ricerca torrent non riuscita su %s: %s", _label, exc)
+                logging.info("Ricerca torrent non riuscita su %s: %s", label, exc)
                 continue
             for row in rows:
-                current = merged.get(row["infohash"])
-                if current is None or row["seeders"] > current["seeders"]:
-                    merged[row["infohash"]] = row
+                key = (row.get("infohash") or row.get("torrent_url")
+                       or f"{row.get('name')}|{row.get('size')}")
+                current = merged.get(key)
+                if current is None or (
+                        _torrent_search_int(row.get("seeders"), 0)
+                        > _torrent_search_int(current.get("seeders"), 0)):
+                    merged[key] = row
     finally:
         try:
             session.close()
         except Exception:
             pass
-    ordered = sorted(merged.values(),
-                     key=lambda item: (item["seeders"], item["leechers"]),
-                     reverse=True)
+    ordered = sorted(
+        merged.values(),
+        key=lambda item: (
+            _torrent_search_int(item.get("seeders"), 0),
+            _torrent_search_int(item.get("leechers"), 0),
+            _torrent_search_int(item.get("popularity"), 0)),
+        reverse=True)
     return ordered[:limit]
 
 
@@ -2867,6 +3004,11 @@ class DownloadManager:
         if not os.path.isfile(path) or not path.lower().endswith(".torrent"):
             raise ValueError("Seleziona un file .torrent valido.")
         with self._condition:
+            existing = next(
+                (t for t in self.tasks if t.torrent_placeholder
+                 and os.path.abspath(t.url) == path), None)
+            if existing is not None:
+                return existing
             task = DownloadTask(self._next_id, path, self._next_order, os.path.basename(path))
             task.torrent_placeholder = True
             task.state = "Recupero metadati torrent…"
@@ -5071,7 +5213,7 @@ class DownloaderApp:
         self.settings_list = tk.Listbox(left, bg=self.PANEL, fg=self.TEXT, selectbackground=self.ACCENT,
             selectforeground="#ffffff", relief="flat", highlightthickness=0, activestyle="none", font=(APP_FONT_FAMILY, 10))
         self.settings_list.pack(fill="both", expand=True)
-        self.settings_categories = ["Download", "Informazioni", "Lingua"]
+        self.settings_categories = ["Download", "Torrent", "Informazioni", "Lingua"]
         self.settings_current_category = "Download"
         for category in self.settings_categories: self.settings_list.insert("end", translate_ui(category, self.language))
         self.settings_list.selection_set(self.settings_categories.index(self.settings_current_category))
@@ -5102,6 +5244,41 @@ class DownloaderApp:
             options = [("system", "Predefinito di sistema"), ("en", "English"), ("de", "Deutsch"), ("it", "Italiano"), ("es", "Español"), ("fr", "Français")]
             for code, label in options:
                 ttk.Radiobutton(self.settings_content, text=translate_ui(label, self.language), variable=self.settings_vars["language"], value=code).pack(anchor="w", pady=2)
+        elif category == "Torrent":
+            tk.Label(self.settings_content,
+                     text=translate_ui("FONTI DI RICERCA", self.language),
+                     bg=self.BG, fg=self.TEXT,
+                     font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(0, 8))
+            tk.Label(self.settings_content,
+                     text=translate_ui(
+                         "La ricerca torrent usa solo fonti legali: Internet Archive "
+                         "(pubblico dominio, Creative Commons, software libero).",
+                         self.language), bg=self.BG, fg=self.MUTED,
+                     wraplength=470, justify="left", anchor="w",
+                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(0, 14))
+            tk.Label(self.settings_content,
+                     text=translate_ui(
+                         "API di ricerca personalizzata (facoltativa)",
+                         self.language), bg=self.BG, fg=self.TEXT,
+                     font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(0, 6))
+            self.settings_vars["torrent_api"] = tk.StringVar(
+                value=load_torrent_search_api())
+            ttk.Entry(self.settings_content,
+                      textvariable=self.settings_vars["torrent_api"],
+                      style="Settings.TEntry").pack(fill="x", pady=(0, 6))
+            tk.Label(self.settings_content,
+                     text=translate_ui(
+                         "URL dell'API con {query} al posto del testo cercato. "
+                         "La risposta deve essere JSON: elenco di risultati con "
+                         "name, size, seeders, leechers e magnet oppure torrent_url.",
+                         self.language), bg=self.BG, fg=self.MUTED,
+                     wraplength=470, justify="left", anchor="w",
+                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(0, 8))
+            tk.Label(self.settings_content,
+                     text=translate_ui("Lascia vuoto per usare solo Internet Archive.",
+                                       self.language),
+                     bg=self.BG, fg=self.MUTED, wraplength=470, justify="left",
+                     anchor="w", font=(APP_FONT_FAMILY, 9)).pack(anchor="w")
         elif category == "Informazioni":
             info_grid = tk.Frame(self.settings_content, bg=self.BG)
             info_grid.pack(anchor="w", pady=(0, 16))
@@ -5214,6 +5391,10 @@ class DownloaderApp:
         try:
             if category == "Lingua":
                 self._change_language(self.settings_vars["language"].get())
+                return
+            if category == "Torrent":
+                save_torrent_search_api(
+                    self.settings_vars["torrent_api"].get())
                 return
             if category == "Download":
                 raw_folder = self.settings_vars["download_directory"].get().strip()
@@ -6462,6 +6643,12 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         tk.Label(body, textvariable=self.torrent_search_status, bg=self.PANEL,
                  fg=self.MUTED, font=(APP_FONT_FAMILY, 9),
                  anchor="w").pack(fill="x")
+        tk.Label(body, text=translate_ui(
+            "Fonti legali: Internet Archive (pubblico dominio, Creative Commons, "
+            "software libero) e l'API configurata nelle impostazioni Torrent.",
+            self.language), bg=self.PANEL, fg=self.MUTED,
+            font=(APP_FONT_FAMILY, 8), wraplength=860,
+            justify="left", anchor="w").pack(fill="x", pady=(2, 0))
 
         table_wrap = tk.Frame(body, bg=self.PANEL)
         table_wrap.pack(fill="both", expand=True, pady=(10, 10))
@@ -6554,10 +6741,14 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
             tree.delete(iid)
         self.torrent_search_rows = {}
         for row in results:
+            seeders = row.get("seeders")
+            leechers = row.get("leechers")
             iid = tree.insert("", "end", values=(
                 row["name"], human_size(row["size"]),
-                row["seeders"], row["leechers"], row["source"]))
-            self.torrent_search_rows[iid] = row["magnet"]
+                "—" if seeders is None else seeders,
+                "—" if leechers is None else leechers,
+                translate_ui(row["source"], self.language)))
+            self.torrent_search_rows[iid] = row
         if results:
             status.set(translate_ui("{0} risultati trovati.",
                                     self.language).format(len(results)))
@@ -6569,18 +6760,64 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         if tree is None:
             return
         selection = tree.selection()
-        magnet = (getattr(self, "torrent_search_rows", {}).get(selection[0])
-                  if selection else None)
-        if not magnet:
-            status = getattr(self, "torrent_search_status", None)
+        row = (getattr(self, "torrent_search_rows", {}).get(selection[0])
+               if selection else None)
+        status = getattr(self, "torrent_search_status", None)
+        if not row:
             if status is not None:
                 status.set(translate_ui(
                     "Seleziona un risultato da aggiungere.", self.language))
             return
-        self._add_magnet(magnet)
-        status = getattr(self, "torrent_search_status", None)
+        magnet = row.get("magnet")
+        if magnet:
+            self._add_magnet(magnet)
+            if status is not None:
+                status.set(translate_ui("Aggiunto alla coda.", self.language))
+            return
+        if row.get("torrent_url"):
+            if status is not None:
+                status.set(translate_ui("Download del file torrent…",
+                                        self.language))
+            threading.Thread(target=self._download_search_torrent, args=(row,),
+                             name="search-torrent-file", daemon=True).start()
+            return
         if status is not None:
-            status.set(translate_ui("Aggiunto alla coda.", self.language))
+            status.set(translate_ui("Risultato non valido.", self.language))
+
+    def _download_search_torrent(self, row):
+        path = ""
+        error = ""
+        try:
+            url = row.get("torrent_url")
+            session = make_http_session(url)
+            try:
+                response = session.get(url, timeout=30, allow_redirects=True)
+                response.raise_for_status()
+                data = response.content
+            finally:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+            if not data or len(data) > 8 * 1024 * 1024 or data[:1] != b"d":
+                raise ValueError("File torrent non valido.")
+            folder = os.path.join(DATA_DIR, "torrents")
+            os.makedirs(folder, exist_ok=True)
+            base = str(row.get("identifier") or row.get("name") or "torrent")
+            filename = sanitize_filename(base)[:120] or "torrent"
+            if not filename.lower().endswith(".torrent"):
+                filename += ".torrent"
+            path = os.path.join(folder, filename)
+            temp = path + ".tmp"
+            with open(temp, "wb") as handle:
+                handle.write(data)
+            os.replace(temp, path)
+        except Exception as exc:
+            path = ""
+            error = str(exc) or exc.__class__.__name__
+            logging.exception("Impossibile scaricare il file torrent dalla ricerca")
+        self.events.put(("torrent_file_ready", path,
+                         str(row.get("name") or ""), error))
 
     def _close_torrent_search(self):
         window = getattr(self, "torrent_search_window", None)
@@ -8283,6 +8520,28 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                 elif event[0] == "torrent_search_result":
                     _kind, search_results, search_error = event
                     self._finish_torrent_search(search_results, search_error)
+                elif event[0] == "torrent_file_ready":
+                    _kind, path, name, error = event
+                    status = getattr(self, "torrent_search_status", None)
+                    if error or not path:
+                        if status is not None:
+                            status.set(error or translate_ui(
+                                "Impossibile scaricare il file torrent.",
+                                self.language))
+                    else:
+                        try:
+                            task = self.manager.add_torrent_file(path)
+                        except ValueError as exc:
+                            if status is not None:
+                                status.set(str(exc))
+                        else:
+                            self._suppressed_clipboard_magnet = None
+                            self.tasks_by_id[task.id] = task
+                            self._render(task)
+                            self.url_var.set("")
+                            if status is not None:
+                                status.set(translate_ui(
+                                    "Aggiunto alla coda.", self.language))
                 elif event[0] == "update_check_result":
                     _kind, info, error = event
                     self._finish_update_check(info, error)
