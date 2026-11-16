@@ -20,7 +20,15 @@
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <Property Id="DESKTOP_SHORTCUT" Value="1" Secure="yes" />
     <Property Id="STARTMENU_SHORTCUT" Value="1" Secure="yes" />
+    <!-- Keep the current per-user Run value during major upgrades. New installs
+         opt in by default; upgrades never recreate a user-disabled entry. -->
     <Property Id="STARTUP_APP" Value="1" Secure="yes" />
+    <Property Id="PREVIOUS_STARTUP_APP">
+      <RegistrySearch Id="SearchStartupRun" Root="HKCU"
+                      Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                      Name="DOWNLOADVERSE" Type="raw" />
+    </Property>
+    <CustomAction Id="KeepStartupDisabled" Property="STARTUP_APP" Value="0" />
 
     <Feature Id="MainFeature"
              Title="DOWNLOADVERSE"
@@ -29,7 +37,7 @@
       <ComponentRef Id="MainExecutable" />
       <ComponentRef Id="DesktopShortcutComponent" />
       <ComponentRef Id="StartMenuShortcutComponent" />
-      <ComponentRef Id="StartupShortcutComponent" />
+      <ComponentRef Id="StartupRegistryComponent" />
     </Feature>
 
     <StandardDirectory Id="ProgramFiles64Folder">
@@ -43,6 +51,15 @@
                          KeyPath="yes" />
           <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER"
                         On="uninstall" />
+        </Component>
+        <Component Id="StartupRegistryComponent"
+                   Guid="2A939CA6-FA2E-4F1F-8EE0-89607650BC28"
+                   Condition="STARTUP_APP = &quot;1&quot;">
+          <RegistryValue Root="HKCU"
+                         Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                         Name="DOWNLOADVERSE" Type="string"
+                         Value="&quot;[INSTALLFOLDER]DOWNLOADVERSE.exe&quot;"
+                         KeyPath="yes" />
         </Component>
       </Directory>
     </StandardDirectory>
@@ -82,22 +99,6 @@
                          KeyPath="yes" />
         </Component>
       </Directory>
-    </StandardDirectory>
-
-    <StandardDirectory Id="StartupFolder">
-      <Component Id="StartupShortcutComponent"
-                 Guid="BA91A983-EA8B-4392-92BC-EDC2D5F33BDD"
-                 Condition="STARTUP_APP = &quot;1&quot;">
-        <Shortcut Id="StartupShortcut"
-                  Name="DOWNLOADVERSE"
-                  Description="Avvia DOWNLOADVERSE all'avvio di Windows"
-                  Target="[INSTALLFOLDER]DOWNLOADVERSE.exe"
-                  WorkingDirectory="INSTALLFOLDER"
-                  Icon="AppIcon" />
-        <RegistryValue Root="HKCU" Key="Software\DOWNLOADVERSE"
-                       Name="StartupShortcut" Type="integer" Value="1"
-                       KeyPath="yes" />
-      </Component>
     </StandardDirectory>
 
     <Binary Id="WixUI_Bmp_Banner" SourceFile="assets\setup\banner.bmp" />
@@ -387,5 +388,9 @@
         <Show Dialog="ExitDialog" OnExit="success" />
       </AdminUISequence>
     </UI>
+    <InstallExecuteSequence>
+      <Custom Action="KeepStartupDisabled" After="AppSearch"
+              Condition="(Installed OR WIX_UPGRADE_DETECTED) AND NOT PREVIOUS_STARTUP_APP" />
+    </InstallExecuteSequence>
   </Package>
 </Wix>

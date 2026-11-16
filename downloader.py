@@ -9,7 +9,7 @@ Dipendenze: solo libreria standard di Python. La logica di trasferimento è
 indipendente dalla GUI e comunica gli aggiornamenti tramite queue.Queue.
 """
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.1.1"
 
 import email.message
 import base64
@@ -912,6 +912,36 @@ def save_max_concurrent_config(value, path=LANGUAGE_CONFIG_PATH):
         raise ValueError("max_concurrent must be between 1 and 10")
     _write_app_config({"max_concurrent": value}, path)
 
+def load_startup_preference(path=LANGUAGE_CONFIG_PATH):
+    """Scelta salvata dall'utente per l'avvio automatico, None se mai impostata."""
+    value = _read_app_config(path).get("startup_enabled")
+    return value if isinstance(value, bool) else None
+
+def save_startup_preference(enabled, path=LANGUAGE_CONFIG_PATH):
+    _write_app_config({"startup_enabled": bool(enabled)}, path)
+
+def apply_startup_preference():
+    """Ripristina l'avvio automatico scelto dall'utente dopo un aggiornamento.
+
+    Il setup MSI ricrea la chiave Run durante l'upgrade; se l'utente aveva
+    disattivato l'avvio automatico la rimuoviamo di nuovo all'avvio.
+    """
+    if os.name != "nt":
+        return
+    try:
+        preference = load_startup_preference()
+        if preference is False:
+            if is_startup_enabled():
+                set_startup_enabled(False)
+                logging.info("Avvio automatico disattivato di nuovo secondo la preferenza salvata")
+            return
+        if preference is None:
+            # Prima esecuzione: registra lo stato reale (anche se disattivato
+            # da Gestione attività) così gli aggiornamenti futuri lo rispettano.
+            save_startup_preference(is_startup_enabled())
+    except OSError:
+        logging.exception("Impossibile applicare la preferenza di avvio automatico")
+
 CLOSE_ACTIONS = ("ask", "reduce", "close")
 
 def load_close_action(path=LANGUAGE_CONFIG_PATH):
@@ -1560,6 +1590,323 @@ ES_STRINGS["Segnaposto {0} non supportato: usa {query} o [QUERY]."] = (
 FR_STRINGS["Segnaposto {0} non supportato: usa {query} o [QUERY]."] = (
     "Paramètre {0} non pris en charge : utilisez {query} ou [QUERY].")
 
+UI_STRINGS["Login siti terzi"] = (
+    "Third-party logins", "Drittanbieter-Login")
+ES_STRINGS["Login siti terzi"] = "Inicios de sesión de terceros"
+FR_STRINGS["Login siti terzi"] = "Connexions tierces"
+
+UI_STRINGS["Accesso ai siti che richiedono il login"] = (
+    "Access to sites that require a login",
+    "Zugriff auf Websites mit Anmeldung")
+ES_STRINGS["Accesso ai siti che richiedono il login"] = (
+    "Acceso a sitios que requieren inicio de sesión")
+FR_STRINGS["Accesso ai siti che richiedono il login"] = (
+    "Accès aux sites nécessitant une connexion")
+
+UI_STRINGS["Collega i siti che richiedono un account per scaricare file protetti. I cookie di sessione vengono salvati solo su questo computer."] = (
+    "Connect sites that require an account to download protected files. "
+    "Session cookies are saved only on this computer.",
+    "Verbinden Sie Websites, die ein Konto erfordern, um geschützte Dateien "
+    "herunterzuladen. Sitzungscookies werden nur auf diesem Computer gespeichert.")
+ES_STRINGS["Collega i siti che richiedono un account per scaricare file protetti. I cookie di sessione vengono salvati solo su questo computer."] = (
+    "Conecta sitios que requieren una cuenta para descargar archivos protegidos. "
+    "Las cookies de sesión se guardan solo en este equipo.")
+FR_STRINGS["Collega i siti che richiedono un account per scaricare file protetti. I cookie di sessione vengono salvati solo su questo computer."] = (
+    "Connectez les sites nécessitant un compte pour télécharger des fichiers "
+    "protégés. Les cookies de session sont enregistrés uniquement sur cet ordinateur.")
+
+UI_STRINGS["Collega"] = ("Connect", "Verbinden")
+ES_STRINGS["Collega"] = "Conectar"
+FR_STRINGS["Collega"] = "Connecter"
+
+UI_STRINGS["Collegato"] = ("Connected", "Verbunden")
+ES_STRINGS["Collegato"] = "Conectado"
+FR_STRINGS["Collegato"] = "Connecté"
+
+UI_STRINGS["Premi «Collegato» per rimuovere l'accesso salvato. Se la sessione scade, ripeti il collegamento. Se il sito non viene rilevato, usa lo stesso browser/profilo del login e riprova."] = (
+    "Press “Connected” to remove the saved access. If the session expires, "
+    "connect again. If the site is not detected, use the same browser/profile "
+    "you logged in with and try again.",
+    "Drücken Sie auf „Verbunden“, um den gespeicherten Zugriff zu entfernen. "
+    "Wenn die Sitzung abläuft, verbinden Sie sich erneut. Wenn die Website nicht "
+    "erkannt wird, verwenden Sie denselben Browser/dasselbe Profil wie bei der "
+    "Anmeldung und versuchen Sie es erneut.")
+ES_STRINGS["Premi «Collegato» per rimuovere l'accesso salvato. Se la sessione scade, ripeti il collegamento. Se il sito non viene rilevato, usa lo stesso browser/profilo del login e riprova."] = (
+    "Pulsa «Conectado» para eliminar el acceso guardado. Si la sesión caduca, "
+    "vuelve a conectarte. Si el sitio no se detecta, usa el mismo navegador/perfil "
+    "con el que iniciaste sesión y vuelve a intentarlo.")
+FR_STRINGS["Premi «Collegato» per rimuovere l'accesso salvato. Se la sessione scade, ripeti il collegamento. Se il sito non viene rilevato, usa lo stesso browser/profilo del login e riprova."] = (
+    "Appuyez sur « Connecté » pour supprimer l'accès enregistré. Si la session "
+    "expire, reconnectez-vous. Si le site n'est pas détecté, utilisez le même "
+    "navigateur/profil que lors de la connexion et réessayez.")
+
+UI_STRINGS["Vuoi scollegare {0}? I cookie salvati verranno eliminati."] = (
+    "Disconnect {0}? Saved cookies will be deleted.",
+    "{0} trennen? Die gespeicherten Cookies werden gelöscht.")
+ES_STRINGS["Vuoi scollegare {0}? I cookie salvati verranno eliminati."] = (
+    "¿Desconectar {0}? Las cookies guardadas se eliminarán.")
+FR_STRINGS["Vuoi scollegare {0}? I cookie salvati verranno eliminati."] = (
+    "Déconnecter {0} ? Les cookies enregistrés seront supprimés.")
+
+UI_STRINGS["Impossibile salvare l'accesso."] = (
+    "Could not save the access.", "Zugriff konnte nicht gespeichert werden.")
+ES_STRINGS["Impossibile salvare l'accesso."] = "No se pudo guardar el acceso."
+FR_STRINGS["Impossibile salvare l'accesso."] = "Impossible d'enregistrer l'accès."
+
+UI_STRINGS["Accesso a {0}"] = ("Access to {0}", "Zugriff auf {0}")
+ES_STRINGS["Accesso a {0}"] = "Acceso a {0}"
+FR_STRINGS["Accesso a {0}"] = "Accès à {0}"
+
+UI_STRINGS["Accesso a {0} rimosso."] = (
+    "Access to {0} removed.", "Zugriff auf {0} entfernt.")
+ES_STRINGS["Accesso a {0} rimosso."] = "Acceso a {0} eliminado."
+FR_STRINGS["Accesso a {0} rimosso."] = "Accès à {0} supprimé."
+
+UI_STRINGS["Autorizzazione accesso"] = (
+    "Access authorization", "Zugriffsautorisierung")
+ES_STRINGS["Autorizzazione accesso"] = "Autorización de acceso"
+FR_STRINGS["Autorizzazione accesso"] = "Autorisation d'accès"
+
+UI_STRINGS["Vuoi collegare {0}? Verrà aperta la pagina di login nel browser. Autorizzi DOWNLOADVERSE a mantenere l'accesso e a salvare i cookie di sessione su questo computer per scaricare i file che richiedono il login?"] = (
+    "Connect {0}? The login page will open in your browser. Do you authorize "
+    "DOWNLOADVERSE to keep the access and save the session cookies on this "
+    "computer to download files that require a login?",
+    "{0} verbinden? Die Anmeldeseite wird im Browser geöffnet. Autorisieren Sie "
+    "DOWNLOADVERSE, den Zugriff zu speichern und die Sitzungscookies auf diesem "
+    "Computer zu speichern, um Dateien mit Anmeldung herunterzuladen?")
+ES_STRINGS["Vuoi collegare {0}? Verrà aperta la pagina di login nel browser. Autorizzi DOWNLOADVERSE a mantenere l'accesso e a salvare i cookie di sessione su questo computer per scaricare i file che richiedono il login?"] = (
+    "¿Conectar {0}? Se abrirá la página de inicio de sesión en el navegador. "
+    "¿Autorizas a DOWNLOADVERSE a mantener el acceso y guardar las cookies de "
+    "sesión en este equipo para descargar archivos que requieren inicio de sesión?")
+FR_STRINGS["Vuoi collegare {0}? Verrà aperta la pagina di login nel browser. Autorizzi DOWNLOADVERSE a mantenere l'accesso e a salvare i cookie di sessione su questo computer per scaricare i file che richiedono il login?"] = (
+    "Connecter {0} ? La page de connexion va s'ouvrir dans le navigateur. "
+    "Autorisez-vous DOWNLOADVERSE à conserver l'accès et à enregistrer les "
+    "cookies de session sur cet ordinateur pour télécharger les fichiers "
+    "nécessitant une connexion ?")
+
+UI_STRINGS["Effettua l'accesso nella pagina del browser, poi premi Sì per importare i cookie di sessione."] = (
+    "Log in on the browser page, then press Yes to import the session cookies.",
+    "Melden Sie sich auf der Browserseite an und klicken Sie dann auf Ja, um "
+    "die Sitzungscookies zu importieren.")
+ES_STRINGS["Effettua l'accesso nella pagina del browser, poi premi Sì per importare i cookie di sessione."] = (
+    "Inicia sesión en la página del navegador y pulsa Sí para importar las "
+    "cookies de sesión.")
+FR_STRINGS["Effettua l'accesso nella pagina del browser, poi premi Sì per importare i cookie di sessione."] = (
+    "Connectez-vous sur la page du navigateur, puis cliquez sur Oui pour "
+    "importer les cookies de session.")
+
+UI_STRINGS["Nessun cookie di sessione trovato per {0}. Verifica di aver effettuato l'accesso nel browser e riprova."] = (
+    "No session cookies found for {0}. Make sure you are logged in in the "
+    "browser and try again.",
+    "Keine Sitzungscookies für {0} gefunden. Stellen Sie sicher, dass Sie im "
+    "Browser angemeldet sind, und versuchen Sie es erneut.")
+ES_STRINGS["Nessun cookie di sessione trovato per {0}. Verifica di aver effettuato l'accesso nel browser e riprova."] = (
+    "No se encontraron cookies de sesión para {0}. Comprueba que has iniciado "
+    "sesión en el navegador y vuelve a intentarlo.")
+FR_STRINGS["Nessun cookie di sessione trovato per {0}. Verifica di aver effettuato l'accesso nel browser e riprova."] = (
+    "Aucun cookie de session trouvé pour {0}. Vérifiez que vous êtes connecté "
+    "dans le navigateur et réessayez.")
+
+UI_STRINGS["Accesso a {0} salvato."] = (
+    "Access to {0} saved.", "Zugriff auf {0} gespeichert.")
+ES_STRINGS["Accesso a {0} salvato."] = "Acceso a {0} guardado."
+FR_STRINGS["Accesso a {0} salvato."] = "Accès à {0} enregistré."
+
+UI_STRINGS["Archive.org, LibriVox e altri contenuti che richiedono l'accesso."] = (
+    "Archive.org, LibriVox and other content that requires a login.",
+    "Archive.org, LibriVox und andere Inhalte, die eine Anmeldung erfordern.")
+ES_STRINGS["Archive.org, LibriVox e altri contenuti che richiedono l'accesso."] = (
+    "Archive.org, LibriVox y otros contenidos que requieren inicio de sesión.")
+FR_STRINGS["Archive.org, LibriVox e altri contenuti che richiedono l'accesso."] = (
+    "Archive.org, LibriVox et autres contenus nécessitant une connexion.")
+
+UI_STRINGS["File e cartelle MEGA protetti da account."] = (
+    "MEGA files and folders protected by an account.",
+    "Durch ein Konto geschützte MEGA-Dateien und -Ordner.")
+ES_STRINGS["File e cartelle MEGA protetti da account."] = (
+    "Archivos y carpetas de MEGA protegidos por una cuenta.")
+FR_STRINGS["File e cartelle MEGA protetti da account."] = (
+    "Fichiers et dossiers MEGA protégés par un compte.")
+
+UI_STRINGS["File Drive con accesso riservato all'account."] = (
+    "Drive files restricted to the account.", "Drive-Dateien mit Kontozugriff.")
+ES_STRINGS["File Drive con accesso riservato all'account."] = (
+    "Archivos de Drive con acceso restringido a la cuenta.")
+FR_STRINGS["File Drive con accesso riservato all'account."] = (
+    "Fichiers Drive à accès réservé au compte.")
+
+UI_STRINGS["Trovati cookie per {0} ma non di sessione. Assicurati di aver effettuato l'accesso nello stesso browser/profilo e riprova."] = (
+    "Cookies were found for {0} but no session cookies. Make sure you are logged "
+    "in with the same browser/profile and try again.",
+    "Cookies für {0} gefunden, aber keine Sitzungscookies. Stellen Sie sicher, "
+    "dass Sie im selben Browser/Profil angemeldet sind, und versuchen Sie es erneut.")
+ES_STRINGS["Trovati cookie per {0} ma non di sessione. Assicurati di aver effettuato l'accesso nello stesso browser/profilo e riprova."] = (
+    "Se encontraron cookies para {0} pero no de sesión. Comprueba que has "
+    "iniciado sesión con el mismo navegador/perfil y vuelve a intentarlo.")
+FR_STRINGS["Trovati cookie per {0} ma non di sessione. Assicurati di aver effettuato l'accesso nello stesso browser/profilo e riprova."] = (
+    "Des cookies ont été trouvés pour {0} mais pas de session. Vérifiez que vous "
+    "êtes connecté avec le même navigateur/profil et réessayez.")
+
+UI_STRINGS["MEGA non salva la sessione nei cookie del browser: il collegamento automatico è best-effort."] = (
+    "MEGA does not store the session in browser cookies: automatic connection "
+    "is best-effort.",
+    "MEGA speichert die Sitzung nicht in Browser-Cookies: Die automatische "
+    "Verbindung ist Best-Effort.")
+ES_STRINGS["MEGA non salva la sessione nei cookie del browser: il collegamento automatico è best-effort."] = (
+    "MEGA no guarda la sesión en las cookies del navegador: la conexión "
+    "automática es best-effort.")
+FR_STRINGS["MEGA non salva la sessione nei cookie del browser: il collegamento automatico è best-effort."] = (
+    "MEGA ne stocke pas la session dans les cookies du navigateur : la connexion "
+    "automatique est best-effort.")
+
+UI_STRINGS["MEGA conserva la sessione nello storage del browser, non nei cookie. Il collegamento automatico non è disponibile: usa il browser o l'app MEGA per i file riservati all'account."] = (
+    "MEGA keeps the session in browser storage, not in cookies. Automatic "
+    "connection is not available: use the browser or the MEGA app for "
+    "account-restricted files.",
+    "MEGA speichert die Sitzung im Browserspeicher, nicht in Cookies. Die "
+    "automatische Verbindung ist nicht verfügbar: Verwenden Sie den Browser oder "
+    "die MEGA-App für kontogeschützte Dateien.")
+ES_STRINGS["MEGA conserva la sessione nello storage del browser, non nei cookie. Il collegamento automatico non è disponibile: usa il browser o l'app MEGA per i file riservati all'account."] = (
+    "MEGA guarda la sesión en el almacenamiento del navegador, no en las cookies. "
+    "La conexión automática no está disponible: usa el navegador o la app MEGA "
+    "para los archivos restringidos a la cuenta.")
+FR_STRINGS["MEGA conserva la sessione nello storage del browser, non nei cookie. Il collegamento automatico non è disponibile: usa il browser o l'app MEGA per i file riservati all'account."] = (
+    "MEGA conserve la session dans le stockage du navigateur, pas dans les "
+    "cookies. La connexion automatique n'est pas disponible : utilisez le "
+    "navigateur ou l'application MEGA pour les fichiers réservés au compte.")
+
+UI_STRINGS["Se il browser non viene letto (Chrome/Edge possono richiedere permessi), prova con Firefox."] = (
+    "If the browser cannot be read (Chrome/Edge may require permissions), try Firefox.",
+    "Wenn der Browser nicht gelesen werden kann (Chrome/Edge erfordern "
+    "möglicherweise Berechtigungen), versuchen Sie Firefox.")
+ES_STRINGS["Se il browser non viene letto (Chrome/Edge possono richiedere permessi), prova con Firefox."] = (
+    "Si no se puede leer el navegador (Chrome/Edge pueden requerir permisos), "
+    "prueba con Firefox.")
+FR_STRINGS["Se il browser non viene letto (Chrome/Edge possono richiedere permessi), prova con Firefox."] = (
+    "Si le navigateur ne peut pas être lu (Chrome/Edge peuvent nécessiter des "
+    "autorisations), essayez Firefox.")
+
+UI_STRINGS["File MediaFire con accesso riservato all'account."] = (
+    "MediaFire files restricted to the account.",
+    "MediaFire-Dateien mit Kontozugriff.")
+ES_STRINGS["File MediaFire con accesso riservato all'account."] = (
+    "Archivos de MediaFire con acceso restringido a la cuenta.")
+FR_STRINGS["File MediaFire con accesso riservato all'account."] = (
+    "Fichiers MediaFire à accès réservé au compte.")
+
+UI_STRINGS["Giochi e file GOG collegati all'account."] = (
+    "GOG games and files linked to the account.",
+    "Mit dem Konto verknüpfte GOG-Spiele und -Dateien.")
+ES_STRINGS["Giochi e file GOG collegati all'account."] = (
+    "Juegos y archivos de GOG vinculados a la cuenta.")
+FR_STRINGS["Giochi e file GOG collegati all'account."] = (
+    "Jeux et fichiers GOG liés au compte.")
+
+UI_STRINGS["Libreria GOG"] = ("GOG library", "GOG-Bibliothek")
+ES_STRINGS["Libreria GOG"] = "Biblioteca GOG"
+FR_STRINGS["Libreria GOG"] = "Bibliothèque GOG"
+
+UI_STRINGS["LIBRERIA GOG"] = ("GOG LIBRARY", "GOG-BIBLIOTHEK")
+ES_STRINGS["LIBRERIA GOG"] = "BIBLIOTECA GOG"
+FR_STRINGS["LIBRERIA GOG"] = "BIBLIOTHÈQUE GOG"
+
+UI_STRINGS["GIOCO"] = ("GAME", "SPIEL")
+ES_STRINGS["GIOCO"] = "JUEGO"
+FR_STRINGS["GIOCO"] = "JEU"
+
+UI_STRINGS["CATEGORIA"] = ("CATEGORY", "KATEGORIE")
+ES_STRINGS["CATEGORIA"] = "CATEGORÍA"
+FR_STRINGS["CATEGORIA"] = "CATÉGORIE"
+
+UI_STRINGS["FILE"] = ("FILE", "DATEI")
+ES_STRINGS["FILE"] = "ARCHIVO"
+FR_STRINGS["FILE"] = "FICHIER"
+
+UI_STRINGS["TIPO"] = ("TYPE", "TYP")
+ES_STRINGS["TIPO"] = "TIPO"
+FR_STRINGS["TIPO"] = "TYPE"
+
+UI_STRINGS["LINGUA"] = ("LANGUAGE", "SPRACHE")
+ES_STRINGS["LINGUA"] = "IDIOMA"
+FR_STRINGS["LINGUA"] = "LANGUE"
+
+UI_STRINGS["VERSIONE"] = ("VERSION", "VERSION")
+ES_STRINGS["VERSIONE"] = "VERSIÓN"
+FR_STRINGS["VERSIONE"] = "VERSION"
+
+UI_STRINGS["Aggiorna"] = ("Refresh", "Aktualisieren")
+ES_STRINGS["Aggiorna"] = "Actualizar"
+FR_STRINGS["Aggiorna"] = "Actualiser"
+
+UI_STRINGS["Filtra giochi"] = ("Filter games", "Spiele filtern")
+ES_STRINGS["Filtra giochi"] = "Filtrar juegos"
+FR_STRINGS["Filtra giochi"] = "Filtrer les jeux"
+
+UI_STRINGS["Caricamento libreria…"] = (
+    "Loading library…", "Bibliothek wird geladen…")
+ES_STRINGS["Caricamento libreria…"] = "Cargando biblioteca…"
+FR_STRINGS["Caricamento libreria…"] = "Chargement de la bibliothèque…"
+
+UI_STRINGS["Caricamento file…"] = (
+    "Loading files…", "Dateien werden geladen…")
+ES_STRINGS["Caricamento file…"] = "Cargando archivos…"
+FR_STRINGS["Caricamento file…"] = "Chargement des fichiers…"
+
+UI_STRINGS["{0} giochi trovati."] = (
+    "{0} games found.", "{0} Spiele gefunden.")
+ES_STRINGS["{0} giochi trovati."] = "{0} juegos encontrados."
+FR_STRINGS["{0} giochi trovati."] = "{0} jeux trouvés."
+
+UI_STRINGS["{0} file trovati per {1}."] = (
+    "{0} files found for {1}.", "{0} Dateien für {1} gefunden.")
+ES_STRINGS["{0} file trovati per {1}."] = "{0} archivos encontrados para {1}."
+FR_STRINGS["{0} file trovati per {1}."] = "{0} fichiers trouvés pour {1}."
+
+UI_STRINGS["Seleziona almeno un file."] = (
+    "Select at least one file.", "Wählen Sie mindestens eine Datei aus.")
+ES_STRINGS["Seleziona almeno un file."] = "Selecciona al menos un archivo."
+FR_STRINGS["Seleziona almeno un file."] = "Sélectionnez au moins un fichier."
+
+UI_STRINGS["{0} file aggiunti alla coda."] = (
+    "{0} files added to the queue.", "{0} Dateien zur Warteschlange hinzugefügt.")
+ES_STRINGS["{0} file aggiunti alla coda."] = (
+    "{0} archivos añadidos a la cola.")
+FR_STRINGS["{0} file aggiunti alla coda."] = (
+    "{0} fichiers ajoutés à la file.")
+
+UI_STRINGS["Collega GOG.com in Impostazioni → Login siti terzi per vedere i tuoi giochi."] = (
+    "Connect GOG.com in Settings → Third-party logins to see your games.",
+    "Verbinden Sie GOG.com in Einstellungen → Drittanbieter-Login, um Ihre "
+    "Spiele zu sehen.")
+ES_STRINGS["Collega GOG.com in Impostazioni → Login siti terzi per vedere i tuoi giochi."] = (
+    "Conecta GOG.com en Ajustes → Inicios de sesión de terceros para ver tus juegos.")
+FR_STRINGS["Collega GOG.com in Impostazioni → Login siti terzi per vedere i tuoi giochi."] = (
+    "Connectez GOG.com dans Paramètres → Connexions tierces pour voir vos jeux.")
+
+UI_STRINGS["GOG non collegato o sessione scaduta. Ricollega GOG.com in Impostazioni → Login siti terzi."] = (
+    "GOG is not connected or the session has expired. Reconnect GOG.com in "
+    "Settings → Third-party logins.",
+    "GOG ist nicht verbunden oder die Sitzung ist abgelaufen. Verbinden Sie "
+    "GOG.com erneut in Einstellungen → Drittanbieter-Login.")
+ES_STRINGS["GOG non collegato o sessione scaduta. Ricollega GOG.com in Impostazioni → Login siti terzi."] = (
+    "GOG no está conectado o la sesión ha caducado. Vuelve a conectar GOG.com "
+    "en Ajustes → Inicios de sesión de terceros.")
+FR_STRINGS["GOG non collegato o sessione scaduta. Ricollega GOG.com in Impostazioni → Login siti terzi."] = (
+    "GOG n'est pas connecté ou la session a expiré. Reconnectez GOG.com dans "
+    "Paramètres → Connexions tierces.")
+
+UI_STRINGS["Installer"] = ("Installer", "Installer")
+ES_STRINGS["Installer"] = "Instalador"
+FR_STRINGS["Installer"] = "Installateur"
+
+UI_STRINGS["Language pack"] = ("Language pack", "Sprachpaket")
+ES_STRINGS["Language pack"] = "Paquete de idioma"
+FR_STRINGS["Language pack"] = "Pack de langue"
+
+UI_STRINGS["Bonus"] = ("Bonus", "Bonus")
+ES_STRINGS["Bonus"] = "Extra"
+FR_STRINGS["Bonus"] = "Bonus"
+
 
 def translate_ui(text, language):
     if language == "it": return text
@@ -1895,6 +2242,267 @@ def save_browser_auth(host, cookie, user_agent="", path=None):
     return target
 
 
+def remove_browser_auth(host, path=None):
+    """Rimuove i cookie salvati per un host."""
+    host = (host or "").strip().lower().strip(".")
+    target = path or COOKIE_CONFIG_PATH
+    data = load_browser_auth(target)
+    if host in data:
+        data.pop(host, None)
+        os.makedirs(os.path.dirname(os.path.abspath(target)), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+
+
+THIRD_PARTY_LOGIN_SITES = (
+    {
+        "key": "internet-archive",
+        "name": "Internet Archive",
+        "login_url": "https://archive.org/account/login",
+        "domain": "archive.org",
+        "cookie_domains": ("archive.org",),
+        "save_domains": ("archive.org",),
+        "required_any": ("logged-in-user", "logged-in-sig", "test-cookie"),
+        "note": "Archive.org, LibriVox e altri contenuti che richiedono l'accesso.",
+    },
+    {
+        "key": "mediafire",
+        "name": "MediaFire",
+        "login_url": "https://www.mediafire.com/login/",
+        "domain": "mediafire.com",
+        "cookie_domains": ("mediafire.com",),
+        "save_domains": ("mediafire.com",),
+        "required_any": ("session_token", "user_session"),
+        "note": "File MediaFire con accesso riservato all'account.",
+    },
+    {
+        "key": "gog",
+        "name": "GOG.com",
+        "login_url": "https://login.gog.com/",
+        "domain": "gog.com",
+        "cookie_domains": ("gog.com",),
+        "save_domains": ("gog.com",),
+        "required_any": ("gog-al", "galaxy-login-al"),
+        "note": "Giochi e file GOG collegati all'account.",
+    },
+    {
+        "key": "google-drive",
+        "name": "Google Drive",
+        "login_url": "https://drive.google.com/",
+        "domain": "google.com",
+        "cookie_domains": ("google.com",),
+        "save_domains": ("google.com",),
+        "required_any": ("SID", "HSID", "SSID", "APISID", "SAPISID",
+                         "__Secure-1PSID", "__Secure-3PSID",
+                         "__Secure-1PAPISID", "__Secure-3PAPISID",
+                         "__Secure-1PSIDTS", "__Secure-3PSIDTS"),
+        "note": "File Drive con accesso riservato all'account.",
+    },
+)
+
+
+def read_browser_cookies(domains, allowed_names=None):
+    """Legge i cookie dai browser installati per i domini indicati."""
+    module = _load_browser_cookie3()
+    if module is None:
+        raise RuntimeError(
+            "browser_cookie3 non è disponibile. Installa il modulo o usa "
+            "«Cookie host protetti».")
+    domains = tuple(str(domain).lstrip(".").lower() for domain in domains)
+    allowed = set(allowed_names or ())
+    values = {}
+    for browser in ("chrome", "edge", "firefox", "brave", "opera",
+                    "chromium", "vivaldi"):
+        function = getattr(module, browser, None)
+        if function is None:
+            continue
+        for domain in domains:
+            try:
+                jar = function(domain_name=domain)
+            except Exception:
+                continue
+            for cookie in jar:
+                cookie_domain = (cookie.domain or "").lstrip(".").lower()
+                if cookie_domain and not any(
+                        cookie_domain == domain
+                        or cookie_domain.endswith("." + domain)
+                        for domain in domains):
+                    continue
+                if allowed and cookie.name not in allowed:
+                    continue
+                values[cookie.name] = cookie.value
+    return values
+
+
+def cookie_header_names(cookie_header):
+    names = set()
+    for part in (cookie_header or "").split(";"):
+        if "=" in part:
+            names.add(part.split("=", 1)[0].strip())
+    return names
+
+
+GOG_ACCOUNT_URL = "https://www.gog.com/en/account"
+_GOG_TOKEN_LOCK = threading.Lock()
+_GOG_TOKEN_CACHE = {"token": "", "expires": 0.0}
+
+
+def is_gog_account_url(url):
+    parsed = urllib.parse.urlsplit((url or "").strip())
+    host = (parsed.hostname or "").lower()
+    return ((host == "gog.com" or host.endswith(".gog.com"))
+            and "account" in parsed.path.lower())
+
+
+def _gog_page_data(html):
+    match = re.search(r"var gogData = (\{.*?\});\s*\n", html or "", re.S)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1))
+    except ValueError:
+        return None
+
+
+def fetch_gog_library():
+    """Legge i giochi posseduti dalla pagina account GOG."""
+    session = make_http_session(GOG_ACCOUNT_URL)
+    response = session.get(GOG_ACCOUNT_URL, timeout=30, allow_redirects=True)
+    response.raise_for_status()
+    data = _gog_page_data(response.text)
+    if data is None:
+        raise RuntimeError(
+            "GOG non collegato o sessione scaduta. Ricollega GOG.com in "
+            "Impostazioni → Login siti terzi.")
+    pages = [data]
+    try:
+        total_pages = int(data.get("totalPages") or 1)
+    except (TypeError, ValueError):
+        total_pages = 1
+    for page in range(2, min(total_pages, 30) + 1):
+        page_response = session.get(GOG_ACCOUNT_URL,
+                                    params={"page": page}, timeout=30)
+        if page_response.status_code != 200:
+            break
+        page_data = _gog_page_data(page_response.text)
+        if page_data is None:
+            break
+        pages.append(page_data)
+    games = {}
+    for page_data in pages:
+        for product in page_data.get("accountProducts") or []:
+            if not isinstance(product, dict):
+                continue
+            try:
+                product_id = int(product.get("id"))
+            except (TypeError, ValueError):
+                continue
+            title = html_module.unescape(str(product.get("title") or "")).strip()
+            if not title:
+                continue
+            games[product_id] = {
+                "id": product_id,
+                "title": title,
+                "slug": str(product.get("slug") or ""),
+                "url": str(product.get("url") or ""),
+                "category": str(product.get("category") or ""),
+                "is_game": bool(product.get("isGame")),
+                "is_movie": bool(product.get("isMovie")),
+            }
+    ordered = sorted(games.values(), key=lambda item: item["title"].casefold())
+    return ordered
+
+
+def fetch_gog_product_files(game):
+    """Elenco installer/patch/bonus di un prodotto GOG posseduto."""
+    product_id = int(game.get("id"))
+    session = make_http_session("https://api.gog.com/")
+    response = session.get(
+        f"https://api.gog.com/products/{product_id}?expand=downloads",
+        timeout=30)
+    response.raise_for_status()
+    data = response.json()
+    downloads = data.get("downloads") or {}
+    rows = []
+    for section, kind in (("installers", "Installer"),
+                          ("patches", "Patch"),
+                          ("language_packs", "Language pack"),
+                          ("bonus_content", "Bonus")):
+        items = downloads.get(section) or []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            files = item.get("files") or []
+            for index, file in enumerate(files):
+                if not isinstance(file, dict):
+                    continue
+                downlink = str(file.get("downlink") or "").strip()
+                if not downlink:
+                    continue
+                try:
+                    size = int(file.get("size") or 0)
+                except (TypeError, ValueError):
+                    size = 0
+                rows.append({
+                    "game_id": product_id,
+                    "game": str(game.get("title") or ""),
+                    "section": section,
+                    "kind": kind,
+                    "name": str(item.get("name") or ""),
+                    "os": str(item.get("os") or ""),
+                    "language": str(item.get("language_full")
+                                    or item.get("language") or ""),
+                    "version": str(item.get("version") or ""),
+                    "size": size,
+                    "file_id": str(file.get("id") or ""),
+                    "part": index + 1,
+                    "parts": len(files),
+                    "downlink": downlink,
+                })
+    return rows
+
+
+def _is_gog_downlink(url):
+    parsed = urllib.parse.urlsplit(url or "")
+    host = (parsed.hostname or "").lower()
+    return ((host == "api.gog.com" or host.endswith(".api.gog.com"))
+            and "/downlink/" in parsed.path.lower())
+
+
+def get_gog_access_token():
+    """Ottiene (e mantiene in cache) il token necessario ai download GOG."""
+    with _GOG_TOKEN_LOCK:
+        now = time.time()
+        if (_GOG_TOKEN_CACHE["token"]
+                and _GOG_TOKEN_CACHE["expires"] > now + 60):
+            return _GOG_TOKEN_CACHE["token"]
+        session = make_http_session("https://api.gog.com/")
+        response = session.post("https://api.gog.com/user/accessToken.json",
+                                timeout=25)
+        response.raise_for_status()
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        token = str(data.get("accessToken") or "")
+        if not token:
+            raise RuntimeError(
+                "Token GOG non disponibile. Ricollega GOG.com in "
+                "Impostazioni → Login siti terzi.")
+        try:
+            expires = float(data.get("accessTokenExpiration") or 0)
+        except (TypeError, ValueError):
+            expires = 0.0
+        _GOG_TOKEN_CACHE["token"] = token
+        _GOG_TOKEN_CACHE["expires"] = expires
+        return token
+
+
+
 def _auth_for_host(host, config):
     host = (host or "").lower().rstrip(".")
     for domain, auth in config.items():
@@ -2211,6 +2819,30 @@ def _extract_page_urls(page, base_url, source_url=None):
     return normalized
 
 
+_ASSET_HOST_HINTS = (
+    'fonts.googleapis.com', 'fonts.gstatic.com', 'gstatic.com',
+    'google-analytics.com', 'googletagmanager.com', 'cloudflareinsights.com',
+)
+_ASSET_PATH_RE = re.compile(
+    r"\.(?:css|js|mjs|json|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|map|xml|webmanifest)$",
+    re.I)
+
+
+def _looks_like_download_url(candidate, base_url):
+    """Scarta font, CSS e analytics che le pagine di errore espongono come link."""
+    parts = urllib.parse.urlsplit(candidate or '')
+    host = (parts.hostname or '').lower()
+    base_host = (urllib.parse.urlsplit(base_url or '').hostname or '').lower()
+    if any(host == item or host.endswith('.' + item) for item in _ASSET_HOST_HINTS):
+        return False
+    path = parts.path or ''
+    if _ASSET_PATH_RE.search(path) and not _FILE_URL_RE.search(path):
+        return False
+    if '/dl/' in path.lower() or _FILE_URL_RE.search(path):
+        return True
+    return host != base_host and bool(path and path != '/')
+
+
 def _response_direct_url(response, base_url):
     location = response.headers.get('Location')
     if location:
@@ -2326,11 +2958,52 @@ def _fuckingfast_htmx_direct(page, page_url, session, timeout, trace):
     return _response_direct_url(posted, endpoint), session
 
 
+def _buzzheavier_session(url):
+    """Sessione curl_cffi con fingerprint accettato da Cloudflare su buzzheavier."""
+    curl = _load_curl_cffi()
+    if curl is not None:
+        for impersonation in ("chrome131", "chrome124", "chrome120", "safari17_0"):
+            try:
+                return curl.Session(impersonate=impersonation)
+            except Exception:
+                continue
+    return make_http_session(url)
+
+
 def resolve_host_url(url, session=None, timeout=25):
-    """Risolvi datanodes.to e fuckingfast.co; ritorna URL, nome eventuale e sessione."""
+    """Risolvi datanodes.to, buzzheavier.com e fuckingfast.co; ritorna URL, nome eventuale e sessione."""
     session = session or make_http_session(url)
     host = (urllib.parse.urlsplit(url).hostname or '').lower()
     trace = []
+    if _is_gog_downlink(url):
+        try:
+            token = get_gog_access_token()
+        except Exception as exc:
+            raise LinkResolutionError(
+                "GOG: accesso non disponibile. Ricollega GOG.com in "
+                "Impostazioni → Login siti terzi. " + str(exc)) from exc
+        response, session = _request_with_fallback(
+            session, 'GET', url,
+            headers={'Authorization': f'Bearer {token}',
+                     'Accept': 'application/json'},
+            timeout=timeout)
+        if _looks_like_cloudflare(response):
+            raise LinkResolutionError(CLOUDFLARE_HELP)
+        response.raise_for_status()
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {}
+        direct = str((payload or {}).get("downlink") or "").strip()
+        if not direct:
+            raise LinkResolutionError(
+                "GOG non ha restituito il link di download. Ricollega GOG.com "
+                "in Impostazioni → Login siti terzi.")
+        parsed = urllib.parse.urlsplit(direct)
+        name = urllib.parse.unquote(os.path.basename(parsed.path)) or None
+        if name:
+            name = sanitize_filename(name, '') or None
+        return direct, name, session
     if host == 'fuckingfast.co' or host.endswith('.fuckingfast.co'):
         response, session = _request_with_fallback(session, 'GET', url, headers={'Referer': url}, timeout=timeout)
         trace.append({'method': 'GET', 'url': url, 'status': getattr(response, 'status_code', None),
@@ -2358,24 +3031,50 @@ def resolve_host_url(url, session=None, timeout=25):
         return direct, name, session
 
     if host == 'datanodes.to' or host.endswith('.datanodes.to'):
-        response, session = _request_with_fallback(session, 'GET', url, headers={'Referer': url}, timeout=timeout)
-        trace.append({'method': 'GET', 'url': url, 'status': getattr(response, 'status_code', None),
+        parsed_url = urllib.parse.urlsplit(url)
+        parts = [urllib.parse.unquote(x) for x in parsed_url.path.split('/') if x]
+        query = urllib.parse.parse_qs(parsed_url.query)
+        file_id = ''
+        page_url = url
+        if parts and parts[0].lower() in ('download', 'd'):
+            candidates = list(parts[1:])
+            for key in ('id', 'file', 'file_id', 'hash'):
+                candidates.extend(query.get(key, []))
+            if parsed_url.fragment:
+                candidates.append(parsed_url.fragment)
+            file_id = next((str(value).strip() for value in candidates
+                            if value and str(value).strip().lower() not in ('download', 'd')), '')
+            if file_id:
+                page_url = (f'{parsed_url.scheme}://{parsed_url.netloc}/'
+                            f'{urllib.parse.quote(file_id)}')
+        elif parts:
+            file_id = parts[0]
+        if not file_id:
+            if parts:
+                message = ("Questo è il pulsante di download di datanodes.to, non il link "
+                           "della pagina del file. Apri la pagina del file e incolla il suo "
+                           "indirizzo (es. https://datanodes.to/ID).")
+            else:
+                message = ("URL datanodes.to privo di ID: incolla il link della pagina del "
+                           "file (es. https://datanodes.to/ID).")
+            raise LinkResolutionError(message)
+        response, session = _request_with_fallback(
+            session, 'GET', page_url, headers={'Referer': page_url},
+            timeout=timeout)
+        trace.append({'method': 'GET', 'url': page_url,
+                      'status': getattr(response, 'status_code', None),
                       'response_url': getattr(response, 'url', None)})
         if _looks_like_cloudflare(response):
             raise LinkResolutionError(CLOUDFLARE_HELP)
         response.raise_for_status()
         page = response.text or ''
-        parts = [urllib.parse.unquote(x) for x in urllib.parse.urlsplit(url).path.split('/') if x]
-        if not parts:
-            raise _debug_link_error(host, page, trace, 'URL datanodes.to privo di ID')
-        file_id = parts[0]
         current, current_page = response, page
-        endpoint, last_page = urllib.parse.urljoin(response.url or url, '/download'), page
+        endpoint, last_page = urllib.parse.urljoin(response.url or page_url, '/download'), page
         for step in range(3):
             page_urls = _extract_page_urls(current_page, current.url or url)
             page_direct = next((x for x in page_urls if '/dl/' in urllib.parse.urlsplit(x).path.lower()), None)
             page_direct = page_direct or next((x for x in page_urls if _FILE_URL_RE.search(urllib.parse.urlsplit(x).path)), None)
-            if page_direct:
+            if page_direct and _looks_like_download_url(page_direct, page_url):
                 return page_direct, None, session
             parsed = _parse_page_forms(current_page)
             form = dict(parsed.inputs)
@@ -2418,7 +3117,8 @@ def resolve_host_url(url, session=None, timeout=25):
                 target = urllib.parse.urljoin(posted.url or endpoint, location)
                 target_host = (urllib.parse.urlsplit(target).hostname or '').lower()
                 original_host = (urllib.parse.urlsplit(url).hostname or '').lower()
-                if target_host != original_host or '/dl/' in urllib.parse.urlsplit(target).path.lower():
+                if (target_host != original_host or '/dl/' in urllib.parse.urlsplit(target).path.lower()) \
+                        and _looks_like_download_url(target, page_url):
                     return target, None, session
                 followed, session = _request_with_fallback(session, 'GET', target,
                     headers={'Referer': posted.url or endpoint}, timeout=timeout, allow_redirects=False)
@@ -2431,7 +3131,7 @@ def resolve_host_url(url, session=None, timeout=25):
                 current, current_page = followed, followed.text or ''
                 continue
             direct = _response_direct_url(posted, endpoint)
-            if direct:
+            if direct and _looks_like_download_url(direct, page_url):
                 return direct, None, session
             if _response_is_file(posted):
                 return posted.url or endpoint, None, session
@@ -2440,6 +3140,106 @@ def resolve_host_url(url, session=None, timeout=25):
             current, current_page, last_page = posted, posted.text or '', posted.text or ''
         raise _debug_link_error(host, last_page or current_page, trace,
                                 'Il server datanodes.to non ha restituito un link diretto entro 3 passaggi')
+
+    if host == 'buzzheavier.com' or host.endswith('.buzzheavier.com'):
+        # La pagina usa HTMX: il pulsante contiene hx-get con un token e il
+        # link CDN firmato arriva nell'header hx-redirect della risposta.
+        parsed_target = urllib.parse.urlsplit(url)
+        if '/d/' in parsed_target.path.lower():
+            return url, None, _buzzheavier_session(url)
+        session = _buzzheavier_session(url)
+        page_headers = {
+            'Referer': url,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'it-IT,it;q=0.9,en;q=0.8',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        pages = []
+        file_name = None
+        if 'download' in parsed_target.path.lower():
+            endpoints = [url]
+            if 'alt=' not in parsed_target.query:
+                endpoints.append(url + ('&' if parsed_target.query else '?') + 'alt=true')
+        else:
+            endpoints = []
+            response = None
+            page = ''
+            for attempt in range(4):
+                try:
+                    response = session.get(url, headers=page_headers, timeout=timeout)
+                except Exception as exc:
+                    response = None
+                    trace.append({'method': 'GET', 'url': url, 'error': str(exc)[:200],
+                                  'attempt': attempt + 1})
+                else:
+                    trace.append({'method': 'GET', 'url': url,
+                                  'status': getattr(response, 'status_code', None),
+                                  'response_url': getattr(response, 'url', None),
+                                  'attempt': attempt + 1})
+                    if (getattr(response, 'status_code', 0) == 200
+                            and not _looks_like_cloudflare(response)):
+                        page = response.text or ''
+                        if 'hx-get' in page or 'copyDownloadLink' in page:
+                            break
+                if attempt < 3:
+                    time.sleep(2 + attempt)
+            if response is None or (getattr(response, 'status_code', 0) >= 400):
+                if response is None or _looks_like_cloudflare(response):
+                    raise LinkResolutionError(CLOUDFLARE_HELP)
+                response.raise_for_status()
+            if not page:
+                page = getattr(response, 'text', '') or ''
+            pages.append(page)
+            name_match = re.search(
+                r'(?is)<p[^>]*class="[^"]*file-name[^"]*"[^>]*>(.*?)</p>', page)
+            if name_match:
+                raw_name = html_module.unescape(re.sub(r'<[^>]+>', ' ', name_match.group(1)))
+                file_name = re.sub(r'\s+', ' ', raw_name).strip() or None
+            else:
+                title_match = re.search(r'(?is)<title[^>]*>(.*?)</title>', page)
+                if title_match:
+                    file_name = html_module.unescape(title_match.group(1)).strip() or None
+            for raw in re.findall(r'(?i)hx-get\s*=\s*["\']([^"\']+)["\']', page):
+                raw = html_module.unescape(raw).strip()
+                if 'download' in raw.lower():
+                    endpoints.append(urllib.parse.urljoin(url, raw))
+            if not endpoints:
+                for raw in re.findall(r"(?i)copyDownloadLink\(\s*['\"]([^'\"]+)['\"]", page):
+                    raw = html_module.unescape(raw).replace('\\/', '/').strip()
+                    if 'download' in raw.lower():
+                        endpoints.append(urllib.parse.urljoin(url, raw))
+            if not endpoints:
+                raise _debug_link_error(host, page, trace,
+                                        'Pulsante di download buzzheavier.com non trovato')
+        seen = set()
+        for endpoint in endpoints:
+            if endpoint in seen:
+                continue
+            seen.add(endpoint)
+            try:
+                hx_response = session.get(
+                    endpoint,
+                    headers={'HX-Request': 'true', 'HX-Current-URL': url,
+                             'Referer': url, 'Accept': '*/*'},
+                    timeout=timeout, allow_redirects=False)
+            except Exception as exc:
+                trace.append({'method': 'GET', 'url': endpoint, 'error': str(exc)[:200]})
+                continue
+            direct = (hx_response.headers.get('hx-redirect')
+                      or hx_response.headers.get('HX-Redirect'))
+            if not direct and hx_response.status_code in (301, 302, 303, 307, 308):
+                direct = hx_response.headers.get('Location')
+            if not direct and hx_response.status_code == 200:
+                direct = _response_direct_url(hx_response, endpoint)
+            trace.append({'method': 'GET', 'url': endpoint,
+                          'status': getattr(hx_response, 'status_code', None),
+                          'response_url': getattr(hx_response, 'url', None),
+                          'hx_redirect': direct})
+            if direct and _looks_like_download_url(direct, endpoint):
+                return urllib.parse.urljoin(endpoint, direct), file_name, session
+        raise _debug_link_error(
+            host, pages[0] if pages else '',
+            trace, 'Il pulsante di download di buzzheavier.com non ha restituito un link diretto')
     return url, None, session
 
 
@@ -3264,6 +4064,7 @@ class DownloadTask:
         self.speed = 0.0
         self.mime = "—"
         self.path = ""
+        self.download_dir = None
         self.error = ""
         self.cancel_event = threading.Event()
         # Stato esplicito per il ciclo asincrono dei magnet; distinto dagli
@@ -3407,7 +4208,7 @@ class DownloadManager:
             self._torrent_session = session
             return session
 
-    def add(self, url, filename=None):
+    def add(self, url, filename=None, download_dir=None, import_group=None):
         url = url.strip()
         if parse_magnet_uri(url):
             return self.add_magnet(url)
@@ -3416,6 +4217,8 @@ class DownloadManager:
             raise ValueError("Inserisci un URL HTTP o HTTPS valido.")
         with self._condition:
             task = DownloadTask(self._next_id, url, self._next_order, filename)
+            task.download_dir = download_dir
+            task.import_group_iid = import_group
             self._next_id += 1
             self._next_order += 1
             self.tasks.append(task)
@@ -4255,16 +5058,17 @@ class DownloadManager:
                             continue
                 self._condition.wait(timeout=0.4)
 
-    def _unique_path(self, name):
+    def _unique_path(self, name, folder=None):
         with self._condition:
-            os.makedirs(self.destination, exist_ok=True)
+            folder = folder or self.destination
+            os.makedirs(folder, exist_ok=True)
             name = sanitize_filename(name)
             stem, ext = os.path.splitext(name)
             stem = stem or name
-            candidate = os.path.join(self.destination, name)
+            candidate = os.path.join(folder, name)
             index = 1
             while os.path.exists(candidate) or candidate in self._reserved:
-                candidate = os.path.join(self.destination, f"{stem} ({index}){ext}")
+                candidate = os.path.join(folder, f"{stem} ({index}){ext}")
                 index += 1
             self._reserved.add(candidate)
             return candidate
@@ -4273,6 +5077,7 @@ class DownloadManager:
         if task.torrent_job is not None:
             self._download_torrent(task)
             return
+        destination = task.download_dir or self.destination
         final_path = part_path = response = None
         try:
             if not task.resolve_started:
@@ -4289,7 +5094,7 @@ class DownloadManager:
             resolved_url = task.resolved_url or task.url
             session = task.session or make_http_session(resolved_url)
             task.session = session
-            candidate_path = task.path or os.path.join(self.destination, sanitize_filename(task.name))
+            candidate_path = task.path or os.path.join(destination, sanitize_filename(task.name))
             part_path = candidate_path + ".part"
             resume_bytes = 0
             if getattr(task, "mega_info", None) and os.path.isfile(part_path + ".decrypting"):
@@ -4307,6 +5112,14 @@ class DownloadManager:
                 headers = {"User-Agent": session.headers.get("User-Agent", BROWSER_UA)}
                 if resolved_url != task.url:
                     headers["Referer"] = task.url
+                if _is_gog_downlink(resolved_url):
+                    try:
+                        headers["Authorization"] = (
+                            f"Bearer {get_gog_access_token()}")
+                    except Exception as exc:
+                        raise LinkResolutionError(
+                            "GOG: accesso non disponibile. Ricollega GOG.com in "
+                            "Impostazioni → Login siti terzi. " + str(exc)) from exc
                 if resume_bytes > 0:
                     headers["Range"] = f"bytes={resume_bytes}-"
                     validator = task.etag or task.last_modified
@@ -4340,7 +5153,7 @@ class DownloadManager:
                 else:
                     task.name = disposition_name or task.preferred_name or task.name or url_name
                 if not task.path and not task.overwrite_allowed:
-                    candidate_path = os.path.join(self.destination, sanitize_filename(task.name))
+                    candidate_path = os.path.join(destination, sanitize_filename(task.name))
                     part_path = candidate_path + ".part"
                 if os.path.exists(candidate_path) and not resume_bytes and not overwrite_checked:
                     overwrite_checked = True
@@ -4399,7 +5212,7 @@ class DownloadManager:
             elif resume_bytes:
                 final_path = candidate_path
             else:
-                final_path = self._unique_path(task.name)
+                final_path = self._unique_path(task.name, destination)
             part_path = final_path + ".part"
             task.path = final_path
             task.state = "In corso"
@@ -4446,7 +5259,9 @@ class DownloadManager:
             if not (task.overwrite_allowed and task.overwrite_path):
                 with self._condition:
                     self._reserved.discard(final_path)
-                    final_path = self._unique_path(os.path.basename(final_path))
+                    final_path = self._unique_path(
+                        os.path.basename(final_path),
+                        os.path.dirname(final_path) or destination)
             if task.overwrite_allowed and task.overwrite_path:
                 os.replace(part_path, final_path)
             else:
@@ -4668,7 +5483,11 @@ class DownloadManager:
             info = {}
             try:
                 session = make_http_session(task.url)
-                response = session.head(task.url, timeout=12, allow_redirects=True)
+                headers = {}
+                if _is_gog_downlink(task.url):
+                    headers["Authorization"] = f"Bearer {get_gog_access_token()}"
+                response = session.head(task.url, timeout=12, allow_redirects=True,
+                                        headers=headers)
                 response.raise_for_status()
                 try:
                     info["size"] = int(response.headers.get("Content-Length"))
@@ -4779,7 +5598,6 @@ class DownloaderApp:
     def __init__(self, root):
         _load_tkinter()
         self.root = root
-        _choose_app_font(root)
         _apply_window_icon(root)
         self.language_choice = load_language_config()
         self.language = detect_system_language() if self.language_choice == "system" else self.language_choice
@@ -4840,6 +5658,9 @@ class DownloaderApp:
         _center_window(self.root)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self._applica_titlebar_finestra(self.root)
+        # Font discovery asks Tk for every installed font family; defer it until
+        # after the first window is visible so it does not block initial paint.
+        self.root.after_idle(lambda: _choose_app_font(root))
         self.root.after(250, self._enable_torrent_drop)
         self.root.after(120, self._poll)
         self._restore_session()
@@ -5015,7 +5836,7 @@ class DownloaderApp:
                 torrent_selected = bool(task.torrent_placeholder and parse_magnet_uri(task.url))
             items.append({
                 "url": task.url, "name": task.name, "preferred_name": task.preferred_name,
-                "path": task.path, "folder": (os.path.dirname(task.path) if task.path else self.destination.get()),
+                "path": task.path, "folder": (os.path.dirname(task.path) if task.path else (task.download_dir or self.destination.get())),
                 "total": task.total, "downloaded": task.downloaded,
                 "progress": task.percent, "state": state, "error": task.error,
                 "priority": task.priority, "was_running": running,
@@ -5461,6 +6282,7 @@ class DownloaderApp:
                                   highlightbackground=self.LINE, highlightthickness=1)
         self.side_menu_items = []
         for label, action in (("Impostazioni", self._open_settings),
+                              ("Libreria GOG", self._open_gog_library),
                               ("Cookie host protetti", self._open_cookie_dialog)):
             button = ttk.Button(self.side_menu, text=translate_ui(label, self.language),
                                 command=lambda callback=action: self._run_side_menu_action(callback))
@@ -5510,18 +6332,7 @@ class DownloaderApp:
         ttk.Button(queue_controls, text=translate_ui("Rimuovi", self.language), command=self._remove_selected).pack(side="left", padx=8)
         ttk.Button(queue_controls, text=translate_ui("Apri file torrent", self.language), command=self._choose_torrent_files).pack(side="left", padx=8)
         ttk.Button(queue_controls, text=translate_ui("Cerca torrent", self.language), command=self._open_torrent_search).pack(side="left", padx=8)
-        self.selection_bar = tk.Frame(self.root, bg=self.PANEL, padx=26, pady=7)
-        ttk.Button(self.selection_bar, text=translate_ui("Seleziona tutti", self.language), command=self._select_all_rows).pack(side="left")
-        ttk.Button(self.selection_bar, text=translate_ui("Deseleziona", self.language), command=self._deselect_rows).pack(side="left", padx=6)
-        ttk.Button(self.selection_bar, text=translate_ui("Priorità", self.language), command=self._apply_bulk_priority).pack(side="left", padx=(10, 4))
-        self.bulk_priority_var = tk.StringVar(value="Normale")
-        self.bulk_priority_option = ttk.OptionMenu(self.selection_bar, self.bulk_priority_var, "Normale", "Alta", "Normale", "Bassa")
-        self.bulk_priority_option.pack(side="left")
-        self.bulk_priority_menu = self.bulk_priority_option["menu"]
-        ttk.Button(self.selection_bar, text=translate_ui("Pausa", self.language), command=lambda: self._bulk_pause(True)).pack(side="left", padx=(8, 3))
-        ttk.Button(self.selection_bar, text=translate_ui("Riprendi", self.language), command=lambda: self._bulk_pause(False)).pack(side="left", padx=3)
-        ttk.Button(self.selection_bar, text=translate_ui("Rimuovi", self.language), command=self._remove_selected).pack(side="left", padx=3)
-        ttk.Button(self.selection_bar, text=translate_ui("Avvia ora", self.language), style="Accent.TButton", command=self._bulk_start_now).pack(side="left", padx=3)
+        ttk.Button(queue_controls, text=translate_ui("Seleziona tutti", self.language), command=self._select_all_rows).pack(side="left", padx=8)
 
         table_wrap = tk.Frame(self.root, bg=self.BG, padx=26)
         table_wrap.pack(fill="both", expand=True, pady=(0, 14))
@@ -5608,6 +6419,7 @@ class DownloaderApp:
         self.tree.bind("<Button-5>", self._on_tree_mousewheel, add="+")
         self.tree.bind("<<TreeviewOpen>>", self._on_tree_open_close, add="+")
         self.tree.bind("<<TreeviewClose>>", self._on_tree_open_close, add="+")
+        self._enable_tree_drag_selection(self.tree)
         self.root.bind("<MouseWheel>", self._on_root_mousewheel, add="+")
         self.root.bind("<Button-4>", self._on_root_mousewheel, add="+")
         self.root.bind("<Button-5>", self._on_root_mousewheel, add="+")
@@ -5684,7 +6496,7 @@ class DownloaderApp:
         self.settings_list = tk.Listbox(left, bg=self.PANEL, fg=self.TEXT, selectbackground=self.ACCENT,
             selectforeground="#ffffff", relief="flat", highlightthickness=0, activestyle="none", font=(APP_FONT_FAMILY, 10))
         self.settings_list.pack(fill="both", expand=True)
-        self.settings_categories = ["Download", "Torrent", "Informazioni", "Lingua"]
+        self.settings_categories = ["Download", "Torrent", "Login siti terzi", "Informazioni", "Lingua"]
         self.settings_current_category = "Download"
         for category in self.settings_categories: self.settings_list.insert("end", translate_ui(category, self.language))
         self.settings_list.selection_set(self.settings_categories.index(self.settings_current_category))
@@ -5794,6 +6606,58 @@ class DownloaderApp:
                      font=(APP_FONT_FAMILY, 9)).pack(anchor="w")
             self._refresh_torrent_api_table()
             self._auto_check_torrent_search_apis()
+        elif category == "Login siti terzi":
+            tk.Label(self.settings_content,
+                     text=translate_ui("Accesso ai siti che richiedono il login",
+                                       self.language), bg=self.BG, fg=self.TEXT,
+                     font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(0, 6))
+            tk.Label(self.settings_content,
+                     text=translate_ui(
+                         "Collega i siti che richiedono un account per scaricare "
+                         "file protetti. I cookie di sessione vengono salvati solo "
+                         "su questo computer.",
+                         self.language), bg=self.BG, fg=self.MUTED,
+                     wraplength=470, justify="left", anchor="w",
+                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(0, 12))
+            self.login_site_buttons = {}
+            for site in THIRD_PARTY_LOGIN_SITES:
+                row = tk.Frame(self.settings_content, bg=self.ROW, padx=12,
+                               pady=9, highlightbackground=self.LINE,
+                               highlightthickness=1)
+                row.pack(fill="x", pady=3)
+                text_box = tk.Frame(row, bg=self.ROW)
+                text_box.pack(side="left", fill="x", expand=True)
+                tk.Label(text_box, text=site["name"], bg=self.ROW, fg=self.TEXT,
+                         font=(APP_FONT_FAMILY, 10, "bold"),
+                         anchor="w").pack(fill="x")
+                tk.Label(text_box, text=translate_ui(site["note"], self.language),
+                         bg=self.ROW, fg=self.MUTED,
+                         font=(APP_FONT_FAMILY, 8), anchor="w").pack(fill="x")
+                button = tk.Button(
+                    row, text=translate_ui("Collega", self.language),
+                    command=lambda item=site: self._connect_third_party_site(item),
+                    bg=self.PANEL, fg=self.ACCENT, activebackground="#242424",
+                    activeforeground=self.ACCENT_HOVER, relief="flat", bd=0,
+                    padx=12, pady=4, cursor="hand2",
+                    font=(APP_FONT_FAMILY, 9, "bold"))
+                button.pack(side="right", padx=(10, 0))
+                self.login_site_buttons[site["key"]] = button
+            self._refresh_third_party_buttons()
+            tk.Label(self.settings_content,
+                     text=translate_ui(
+                         "Premi «Collegato» per rimuovere l'accesso salvato. "
+                         "Se la sessione scade, ripeti il collegamento. Se il sito "
+                         "non viene rilevato, usa lo stesso browser/profilo del "
+                         "login e riprova.", self.language), bg=self.BG,
+                     fg=self.MUTED, wraplength=470, justify="left", anchor="w",
+                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(10, 0))
+            tk.Label(self.settings_content,
+                     text=translate_ui(
+                         "Se il browser non viene letto (Chrome/Edge possono "
+                         "richiedere permessi), prova con Firefox.",
+                         self.language), bg=self.BG, fg=self.MUTED,
+                     wraplength=470, justify="left", anchor="w",
+                     font=(APP_FONT_FAMILY, 9)).pack(anchor="w", pady=(4, 0))
         elif category == "Informazioni":
             info_grid = tk.Frame(self.settings_content, bg=self.BG)
             info_grid.pack(anchor="w", pady=(0, 16))
@@ -5813,6 +6677,7 @@ class DownloaderApp:
             def toggle_startup():
                 try:
                     set_startup_enabled(self.startup_var.get())
+                    save_startup_preference(self.startup_var.get())
                 except OSError as exc:
                     self.startup_var.set(not self.startup_var.get())
                     messagebox.showerror(
@@ -5898,7 +6763,7 @@ class DownloaderApp:
             self.settings_vars["connections"] = tk.IntVar(value=limits["connections_limit"])
             ttk.Spinbox(row,from_=1,to=1000,width=8,textvariable=self.settings_vars["connections"],
                         style="Settings.TSpinbox").pack(side="left")
-        if category not in ("Informazioni", "Torrent"):
+        if category not in ("Informazioni", "Torrent", "Login siti terzi"):
             ttk.Button(self.settings_content, text=translate_ui("Applica", self.language), command=self._apply_settings).pack(anchor="w", pady=(16, 0))
 
     def _set_torrent_api_status(self, text):
@@ -6038,6 +6903,159 @@ class DownloaderApp:
         self._start_torrent_api_check(api)
         self._set_torrent_api_status(translate_ui("Verifica in corso…",
                                                   self.language))
+
+    @staticmethod
+    def _third_party_site_connected(site):
+        auth = load_browser_auth().get(site["domain"], {})
+        header = str(auth.get("cookie") or "") if isinstance(auth, dict) else ""
+        if not header.strip():
+            return False
+        required = site.get("required_any") or ()
+        if required:
+            return bool(cookie_header_names(header) & set(required))
+        return True
+
+    def _refresh_third_party_buttons(self):
+        buttons = getattr(self, "login_site_buttons", {})
+        for site in THIRD_PARTY_LOGIN_SITES:
+            button = buttons.get(site["key"])
+            if button is None:
+                continue
+            connected = self._third_party_site_connected(site)
+            try:
+                button.configure(
+                    text=translate_ui("Collegato" if connected else "Collega",
+                                      self.language),
+                    fg="#39d353" if connected else self.ACCENT,
+                    activeforeground=("#39d353" if connected else self.ACCENT_HOVER))
+            except tk.TclError:
+                pass
+
+    def _connect_third_party_site(self, site):
+        parent = self.settings_window or self.root
+        if self._third_party_site_connected(site):
+            if not messagebox.askyesno(
+                    translate_ui("Login siti terzi", self.language),
+                    translate_ui(
+                        "Vuoi scollegare {0}? I cookie salvati verranno eliminati.",
+                        self.language).format(site["name"]), parent=parent):
+                return
+            try:
+                for domain in site.get("save_domains", (site["domain"],)):
+                    remove_browser_auth(domain)
+            except OSError:
+                logging.exception("Impossibile rimuovere i cookie di %s",
+                                  site["name"])
+                messagebox.showerror(
+                    translate_ui("Login siti terzi", self.language),
+                    translate_ui("Impossibile salvare l'accesso.", self.language),
+                    parent=parent)
+                return
+            self._refresh_third_party_buttons()
+            messagebox.showinfo(
+                translate_ui("Accesso a {0}", self.language).format(site["name"]),
+                translate_ui("Accesso a {0} rimosso.", self.language).format(
+                    site["name"]), parent=parent)
+            return
+        if not messagebox.askyesno(
+                translate_ui("Autorizzazione accesso", self.language),
+                translate_ui(
+                    "Vuoi collegare {0}? Verrà aperta la pagina di login nel "
+                    "browser. Autorizzi DOWNLOADVERSE a mantenere l'accesso e a "
+                    "salvare i cookie di sessione su questo computer per scaricare "
+                    "i file che richiedono il login?", self.language).format(
+                        site["name"]), parent=parent):
+            return
+        try:
+            webbrowser.open(site["login_url"])
+        except Exception as exc:
+            logging.exception("Impossibile aprire la pagina di login di %s",
+                              site["name"])
+            messagebox.showerror(
+                translate_ui("Accesso a {0}", self.language).format(site["name"]),
+                str(exc), parent=parent)
+            return
+        if not messagebox.askyesno(
+                translate_ui("Accesso a {0}", self.language).format(site["name"]),
+                translate_ui(
+                    "Effettua l'accesso nella pagina del browser, poi premi Sì "
+                    "per importare i cookie di sessione.", self.language),
+                parent=parent):
+            return
+        threading.Thread(target=self._read_third_party_cookies_worker,
+                         args=(site,), name="third-party-login",
+                         daemon=True).start()
+
+    def _read_third_party_cookies_worker(self, site):
+        header = ""
+        error = ""
+        required = set(site.get("required_any") or ())
+        found_any = False
+        try:
+            for attempt in range(3):
+                try:
+                    cookies = read_browser_cookies(site["cookie_domains"])
+                except Exception as exc:
+                    error = str(exc) or exc.__class__.__name__
+                    cookies = {}
+                if cookies:
+                    found_any = True
+                    if not required or (set(cookies) & required):
+                        header = "; ".join(f"{name}={value}"
+                                           for name, value in cookies.items())
+                        error = ""
+                        break
+                if attempt < 2:
+                    time.sleep(1.0)
+        except Exception as exc:
+            error = str(exc) or exc.__class__.__name__
+        if not header and not error:
+            if site.get("unsupported_hint"):
+                error = translate_ui(site["unsupported_hint"], self.language)
+            elif found_any:
+                error = translate_ui(
+                    "Trovati cookie per {0} ma non di sessione. Assicurati di "
+                    "aver effettuato l'accesso nello stesso browser/profilo e "
+                    "riprova.", self.language).format(site["name"])
+            else:
+                error = translate_ui(
+                    "Nessun cookie di sessione trovato per {0}. Verifica di aver "
+                    "effettuato l'accesso nel browser e riprova.",
+                    self.language).format(site["name"])
+        logging.info("Lettura cookie per %s: %s", site["name"],
+                     "ok" if header else error)
+        self.events.put(("third_party_login_result", site["key"], header, error))
+
+    def _finish_third_party_login(self, site_key, header, error):
+        site = next((item for item in THIRD_PARTY_LOGIN_SITES
+                     if item["key"] == site_key), None)
+        if site is None:
+            return
+        parent = self.settings_window or self.root
+        if error or not header:
+            detail = error or translate_ui(
+                "Nessun cookie di sessione trovato per {0}. Verifica di aver "
+                "effettuato l'accesso nel browser e riprova.",
+                self.language).format(site["name"])
+            messagebox.showerror(
+                translate_ui("Accesso a {0}", self.language).format(site["name"]),
+                detail, parent=parent)
+            return
+        try:
+            for domain in site.get("save_domains", (site["domain"],)):
+                save_browser_auth(domain, header)
+        except (OSError, ValueError):
+            logging.exception("Impossibile salvare i cookie di %s", site["name"])
+            messagebox.showerror(
+                translate_ui("Accesso a {0}", self.language).format(site["name"]),
+                translate_ui("Impossibile salvare l'accesso.", self.language),
+                parent=parent)
+            return
+        self._refresh_third_party_buttons()
+        messagebox.showinfo(
+            translate_ui("Accesso a {0}", self.language).format(site["name"]),
+            translate_ui("Accesso a {0} salvato.", self.language).format(
+                site["name"]), parent=parent)
 
     def _add_torrent_search_api(self):
         variable = self.settings_vars.get("torrent_api_input")
@@ -6336,10 +7354,17 @@ class DownloaderApp:
             else:
                 exe_path = os.path.abspath(sys.executable)
                 app_args = f'"{os.path.abspath(__file__)}"'
+            # Registra la scelta attuale: il setup non deve riattivare
+            # l'avvio automatico se l'utente lo aveva disattivato.
+            startup_flag = "1" if is_startup_enabled() else "0"
+            try:
+                save_startup_preference(startup_flag == "1")
+            except OSError:
+                logging.exception("Impossibile salvare la preferenza di avvio automatico")
             script_path = os.path.join(
                 tempfile.gettempdir(), f"downloadverse_update_{os.getpid()}.ps1")
             script = r'''
-param([int]$ParentPid, [string]$MsiPath, [string]$ExePath, [string]$AppArgs, [string]$ExpectedVersion)
+param([int]$ParentPid, [string]$MsiPath, [string]$ExePath, [string]$AppArgs, [string]$ExpectedVersion, [string]$StartupApp)
 $logPath = Join-Path $env:TEMP 'downloadverse_update.log'
 Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
 function Write-Log([string]$Message) {
@@ -6352,7 +7377,7 @@ foreach ($pyiVar in @('_PYI_APPLICATION_HOME_DIR', '_PYI_ARCHIVE_FILE', '_PYI_PA
 $deadline = (Get-Date).AddMinutes(5)
 while ((Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 400 }
 Write-Log "programma chiuso, avvio installazione"
-$msiArgs = '/i "' + $MsiPath + '" /passive /norestart'
+$msiArgs = '/i "' + $MsiPath + '" /passive /norestart STARTUP_APP=' + $StartupApp
 try {
     $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Wait -Verb RunAs -PassThru
     Write-Log ("installazione completata, codice " + $proc.ExitCode)
@@ -6410,7 +7435,7 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                 ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
                  "-WindowStyle", "Hidden", "-File", script_path,
                  str(os.getpid()), msi_path, exe_path, app_args,
-                 expected_version],
+                 expected_version, startup_flag],
                 creationflags=creationflags, close_fds=True, env=helper_env)
             messagebox.showinfo(
                 translate_ui("Aggiornamento", self.language),
@@ -8057,10 +9082,352 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         self._render(task)
         return True
 
+    def _open_gog_library(self):
+        existing = getattr(self, "gog_library_window", None)
+        if existing is not None:
+            try:
+                existing.deiconify()
+                existing.lift()
+                return
+            except tk.TclError:
+                self.gog_library_window = None
+        gog_site = next((site for site in THIRD_PARTY_LOGIN_SITES
+                         if site["key"] == "gog"), None)
+        if gog_site is None or not self._third_party_site_connected(gog_site):
+            messagebox.showinfo(
+                translate_ui("Libreria GOG", self.language),
+                translate_ui(
+                    "Collega GOG.com in Impostazioni → Login siti terzi per "
+                    "vedere i tuoi giochi.", self.language),
+                parent=self.root)
+            return
+        window = tk.Toplevel(self.root)
+        window.title(translate_ui("Libreria GOG", self.language))
+        window.geometry("1100x680")
+        window.minsize(900, 520)
+        window.configure(bg=self.PANEL)
+        window.transient(self.root)
+        self.gog_library_window = window
+        self.gog_games = {}
+        self.gog_all_games = []
+        self.gog_files = {}
+        self.gog_current_game = None
+        self.gog_library_running = False
+        self.gog_downloads_running = False
+
+        body = tk.Frame(window, bg=self.PANEL, padx=16, pady=14)
+        body.pack(fill="both", expand=True)
+        header = tk.Frame(body, bg=self.PANEL)
+        header.pack(fill="x")
+        tk.Label(header, text=translate_ui("LIBRERIA GOG", self.language),
+                 bg=self.PANEL, fg=self.ACCENT,
+                 font=(APP_FONT_FAMILY, 11, "bold")).pack(side="left")
+        ttk.Button(header, text=translate_ui("Aggiorna", self.language),
+                   command=self._reload_gog_library).pack(side="right")
+        self.gog_library_status = tk.StringVar(
+            value=translate_ui("Caricamento libreria…", self.language))
+        tk.Label(body, textvariable=self.gog_library_status, bg=self.PANEL,
+                 fg=self.MUTED, anchor="w", font=(APP_FONT_FAMILY, 9)).pack(
+                     fill="x", pady=(4, 8))
+
+        split = tk.Frame(body, bg=self.PANEL)
+        split.pack(fill="both", expand=True)
+        left = tk.Frame(split, bg=self.ROW, padx=6, pady=6,
+                        highlightbackground=self.LINE, highlightthickness=1)
+        left.pack(side="left", fill="y", padx=(0, 8))
+        left.pack_propagate(False)
+        left.configure(width=360)
+        tk.Label(left, text=translate_ui("Filtra giochi", self.language),
+                 bg=self.ROW, fg=self.MUTED, anchor="w",
+                 font=(APP_FONT_FAMILY, 9)).pack(fill="x", pady=(0, 4))
+        self.gog_filter_var = tk.StringVar()
+        ttk.Entry(left, textvariable=self.gog_filter_var,
+                  style="Settings.TEntry").pack(fill="x", pady=(0, 6))
+        games_wrap = tk.Frame(left, bg=self.ROW)
+        games_wrap.pack(fill="both", expand=True)
+        self.gog_games_tree = ttk.Treeview(
+            games_wrap, columns=("title", "category"), show="headings",
+            selectmode="browse", style="NoArrow.Treeview")
+        self.gog_games_tree.heading(
+            "title", text=translate_ui("GIOCO", self.language), anchor="w")
+        self.gog_games_tree.heading(
+            "category", text=translate_ui("CATEGORIA", self.language),
+            anchor="w")
+        self.gog_games_tree.column("title", width=230, minwidth=150,
+                                   anchor="w", stretch=True)
+        self.gog_games_tree.column("category", width=100, minwidth=70,
+                                   anchor="w", stretch=False)
+        games_scrollbar = FluidScrollbar(
+            games_wrap, orient="vertical", command=self.gog_games_tree.yview)
+        self.gog_games_tree.configure(yscrollcommand=games_scrollbar.set)
+        games_scrollbar.pack(side="right", fill="y")
+        self.gog_games_tree.pack(side="left", fill="both", expand=True)
+        self.gog_games_tree.bind("<<TreeviewSelect>>",
+                                 self._gog_game_selected)
+        self.gog_filter_var.trace_add(
+            "write", lambda *_args: self._filter_gog_games())
+
+        right = tk.Frame(split, bg=self.ROW, padx=6, pady=6,
+                         highlightbackground=self.LINE, highlightthickness=1)
+        right.pack(side="left", fill="both", expand=True)
+        files_wrap = tk.Frame(right, bg=self.ROW)
+        files_wrap.pack(fill="both", expand=True)
+        self.gog_files_tree = ttk.Treeview(
+            files_wrap, columns=("name", "kind", "os", "language", "version",
+                                 "size"),
+            show="headings", selectmode="extended",
+            style="NoArrow.Treeview")
+        for column, label, width, anchor in (
+                ("name", "FILE", 240, "w"),
+                ("kind", "TIPO", 80, "w"),
+                ("os", "OS", 65, "w"),
+                ("language", "LINGUA", 85, "w"),
+                ("version", "VERSIONE", 85, "w"),
+                ("size", "DIMENSIONE", 95, "e")):
+            self.gog_files_tree.heading(
+                column, text=translate_ui(label, self.language), anchor=anchor)
+            self.gog_files_tree.column(
+                column, width=width, minwidth=60, stretch=(column == "name"),
+                anchor=anchor)
+        files_scrollbar = FluidScrollbar(
+            files_wrap, orient="vertical", command=self.gog_files_tree.yview)
+        files_xscroll = FluidScrollbar(
+            files_wrap, orient="horizontal", command=self.gog_files_tree.xview)
+        self.gog_files_tree.configure(yscrollcommand=files_scrollbar.set,
+                                      xscrollcommand=files_xscroll.set)
+        files_scrollbar.pack(side="right", fill="y")
+        files_xscroll.pack(side="bottom", fill="x")
+        self.gog_files_tree.pack(side="left", fill="both", expand=True)
+        self._enable_tree_drag_selection(self.gog_files_tree)
+
+        buttons = tk.Frame(body, bg=self.PANEL)
+        buttons.pack(fill="x", pady=(8, 0))
+        ttk.Button(buttons, text=translate_ui("Seleziona tutti", self.language),
+                   command=self._select_all_gog_files).pack(side="left")
+        ttk.Button(buttons, text=translate_ui("Aggiungi selezionati",
+                                              self.language),
+                   style="Accent.TButton",
+                   command=self._add_gog_selected).pack(side="left", padx=(6, 0))
+        ttk.Button(buttons, text=translate_ui("Chiudi", self.language),
+                   command=self._close_gog_library).pack(side="right")
+
+        window.protocol("WM_DELETE_WINDOW", self._close_gog_library)
+        _center_window(window, self.root)
+        self._applica_titlebar_finestra(window)
+        self._load_gog_library()
+
+    def _load_gog_library(self):
+        if getattr(self, "gog_library_running", False):
+            return
+        self.gog_library_running = True
+        self.gog_library_status.set(
+            translate_ui("Caricamento libreria…", self.language))
+        threading.Thread(target=self._gog_library_worker,
+                         name="gog-library", daemon=True).start()
+
+    def _reload_gog_library(self):
+        try:
+            self.gog_files_tree.delete(*self.gog_files_tree.get_children())
+        except (AttributeError, tk.TclError):
+            pass
+        self.gog_files = {}
+        self.gog_current_game = None
+        self.gog_library_running = False
+        self._load_gog_library()
+
+    def _gog_library_worker(self):
+        games = []
+        error = ""
+        try:
+            games = fetch_gog_library()
+        except Exception as exc:
+            logging.exception("Caricamento libreria GOG non riuscito")
+            error = self._gog_error_message(exc)
+        self.events.put(("gog_library_result", games, error))
+
+    def _finish_gog_library(self, games, error):
+        self.gog_library_running = False
+        if getattr(self, "gog_library_window", None) is None:
+            return
+        if error:
+            self.gog_library_status.set(error)
+            return
+        self.gog_all_games = list(games or [])
+        self._filter_gog_games()
+        self.gog_library_status.set(
+            translate_ui("{0} giochi trovati.", self.language).format(
+                len(self.gog_all_games)))
+
+    def _filter_gog_games(self):
+        tree = getattr(self, "gog_games_tree", None)
+        if tree is None:
+            return
+        try:
+            query = self.gog_filter_var.get().casefold().strip()
+        except (AttributeError, tk.TclError):
+            query = ""
+        for iid in tree.get_children():
+            tree.delete(iid)
+        self.gog_games = {}
+        for game in getattr(self, "gog_all_games", []):
+            if query and query not in game["title"].casefold():
+                continue
+            iid = tree.insert("", "end", values=(game["title"],
+                                                 game["category"]))
+            self.gog_games[iid] = game
+
+    def _gog_game_selected(self, _event=None):
+        tree = getattr(self, "gog_games_tree", None)
+        files_tree = getattr(self, "gog_files_tree", None)
+        if tree is None or files_tree is None:
+            return
+        selection = tree.selection()
+        if not selection:
+            return
+        game = self.gog_games.get(selection[0])
+        if game is None:
+            return
+        self.gog_current_game = game
+        self.gog_files = {}
+        try:
+            files_tree.delete(*files_tree.get_children())
+        except tk.TclError:
+            return
+        self.gog_library_status.set(
+            translate_ui("Caricamento file…", self.language))
+        threading.Thread(target=self._gog_downloads_worker, args=(game,),
+                         name="gog-downloads", daemon=True).start()
+
+    def _gog_downloads_worker(self, game):
+        rows = []
+        error = ""
+        try:
+            rows = fetch_gog_product_files(game)
+        except Exception as exc:
+            logging.exception("Caricamento file GOG non riuscito")
+            error = self._gog_error_message(exc)
+        self.events.put(("gog_downloads_result", game.get("id"), rows, error))
+
+    def _finish_gog_downloads(self, game_id, rows, error):
+        self.gog_downloads_running = False
+        current = getattr(self, "gog_current_game", None)
+        if current is None or current.get("id") != game_id:
+            return
+        tree = getattr(self, "gog_files_tree", None)
+        if tree is None:
+            return
+        if error:
+            self.gog_library_status.set(error)
+            return
+        self.gog_files = {}
+        try:
+            tree.delete(*tree.get_children())
+        except tk.TclError:
+            return
+        for row in rows or []:
+            name = row["name"] or row["file_id"]
+            if row["parts"] > 1:
+                name = f"{name} — {row['part']}/{row['parts']}"
+            iid = tree.insert("", "end", values=(
+                name, translate_ui(row["kind"], self.language),
+                (row["os"] or "—").title(),
+                row["language"] or "—",
+                row["version"] or "—",
+                human_size(row["size"])))
+            self.gog_files[iid] = row
+        self.gog_library_status.set(
+            translate_ui("{0} file trovati per {1}.", self.language).format(
+                len(self.gog_files), current.get("title", "")))
+
+    def _gog_preferred_name(self, row):
+        name = row["name"] or row["file_id"]
+        if row["parts"] > 1:
+            name = f"{name} - parte {row['part']}"
+        return sanitize_filename(f"{row['game']} - {name}", "GOG file")
+
+    def _add_gog_selected(self):
+        tree = getattr(self, "gog_files_tree", None)
+        if tree is None:
+            return
+        selection = tree.selection()
+        if not selection:
+            self.gog_library_status.set(translate_ui(
+                "Seleziona almeno un file.", self.language))
+            return
+        game = getattr(self, "gog_current_game", None) or {}
+        game_title = str(game.get("title") or "GOG")
+        folder = os.path.join(self.destination.get(),
+                              sanitize_filename(game_title, "GOG"))
+        self._import_group_counter += 1
+        group_iid = f"import-group-{self._import_group_counter}"
+        group = self._ensure_import_group(group_iid, game_title,
+                                          is_open=False)
+        added = 0
+        for iid in selection:
+            item = self.gog_files.get(iid)
+            if item is None:
+                continue
+            try:
+                task = self.manager.add(item["downlink"],
+                                        download_dir=folder,
+                                        import_group=group_iid)
+            except ValueError as exc:
+                messagebox.showwarning(
+                    translate_ui("URL non valido", self.language), str(exc),
+                    parent=self.gog_library_window or self.root)
+                continue
+            task.name = self._gog_preferred_name(item)
+            task.total = item["size"] or None
+            self.tasks_by_id[task.id] = task
+            self._render(task)
+            added += 1
+        if added:
+            self._render_import_group(group)
+            self.gog_library_status.set(translate_ui(
+                "{0} file aggiunti alla coda.", self.language).format(added))
+            self.url_var.set("")
+        else:
+            self._render_import_group(group)
+
+    def _select_all_gog_files(self):
+        tree = getattr(self, "gog_files_tree", None)
+        if tree is not None:
+            tree.selection_set(tree.get_children())
+
+    def _close_gog_library(self):
+        window = getattr(self, "gog_library_window", None)
+        self.gog_library_window = None
+        self.gog_games_tree = None
+        self.gog_files_tree = None
+        self.gog_games = {}
+        self.gog_files = {}
+        self.gog_current_game = None
+        self.gog_library_running = False
+        self.gog_downloads_running = False
+        if window is not None:
+            try:
+                window.destroy()
+            except tk.TclError:
+                pass
+
+    def _gog_error_message(self, exc):
+        text = str(exc) or exc.__class__.__name__
+        lowered = text.casefold()
+        if any(token in lowered for token in ("401", "403", "login", "sessione",
+                                               "token", "accesso")):
+            return translate_ui(
+                "GOG non collegato o sessione scaduta. Ricollega GOG.com in "
+                "Impostazioni → Login siti terzi.", self.language)
+        return text
+
     def _add_from_button(self):
         url = ("" if getattr(self, "_url_placeholder_active", False)
                else self.url_var.get().strip())
         if not url:
+            return
+        if is_gog_account_url(url):
+            self.url_var.set("")
+            self._open_gog_library()
             return
         embedded = extract_urls_from_text(url)
         if len(embedded) > 1:
@@ -8402,8 +9769,13 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         selection = self.tree.selection()
         if not selection:
             return None
+        # Con una selezione multipla il tasto destro agisce sulla riga
+        # cliccata (focus), senza ridurre la selezione a una sola riga.
+        iid = self.tree.focus()
+        if iid not in selection:
+            iid = selection[0]
         try:
-            ident = int(self.tree.item(selection[0], "tags")[0])
+            ident = int(self.tree.item(iid, "tags")[0])
         except (IndexError, TypeError, ValueError):
             return None
         return self.tasks_by_id.get(ident)
@@ -8411,6 +9783,9 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
     def _on_tree_selection(self, _event=None):
         self._refresh_pause_button()
         self._refresh_selection_bar()
+        # La barra grafica copre la colonna PROGRESSO: quando cambia la
+        # selezione (anche durante il trascinamento) va ridisegnata subito.
+        self._schedule_progress_overlay()
 
     def _pause_action_for_selection(self):
         """Return the action implied by the selected task or torrent group."""
@@ -8443,20 +9818,9 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                          command=self._pause_cancel)
 
     def _refresh_selection_bar(self):
-        try:
-            selection = self.tree.selection()
-        except tk.TclError:
-            selection = ()
-        show = False
-        if selection:
-            # La barra azioni multiple appare solo con una selezione multipla:
-            # la semplice riga evidenziata è già la selezione del file.
-            show = len(selection) > 1
-        if show:
-            if not self.selection_bar.winfo_manager():
-                self.selection_bar.pack(fill="x", before=self.tree.master, pady=(0, 5))
-        else:
-            self.selection_bar.pack_forget()
+        # La barra azioni multiple è stata rimossa: "Seleziona tutti" è nella
+        # barra principale e la tabella non si sposta più alla selezione.
+        return
 
     def _tree_click(self, event):
         """Espande/chiude un gruppo cliccando l'icona +/−."""
@@ -8481,6 +9845,81 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         else:
             self._toggle_torrent_group(iid)
         return "break"
+
+    @staticmethod
+    def _visible_tree_rows(tree):
+        rows = []
+        def walk(parent):
+            for iid in tree.get_children(parent):
+                try:
+                    if tree.bbox(iid):
+                        rows.append(iid)
+                    if int(tree.item(iid, "open") or 0):
+                        walk(iid)
+                except tk.TclError:
+                    continue
+        walk("")
+        return rows
+
+    def _enable_tree_drag_selection(self, tree):
+        """Selezione multipla trascinando il cursore sulle righe."""
+        state = {"y": None, "active": False, "base": ()}
+
+        def on_press(event):
+            try:
+                if not tree.identify_row(event.y):
+                    return
+            except tk.TclError:
+                return
+            state["y"] = event.y
+            state["active"] = False
+            state["base"] = tree.selection()
+
+        def on_motion(event):
+            if state["y"] is None:
+                return
+            if not state["active"]:
+                if abs(event.y - state["y"]) < 4:
+                    return
+                state["active"] = True
+            top, bottom = sorted((state["y"], event.y))
+            selected = list(state["base"]) if (event.state & 0x0004) else []
+            for iid in self._visible_tree_rows(tree):
+                try:
+                    bbox = tree.bbox(iid)
+                except tk.TclError:
+                    continue
+                if not bbox:
+                    continue
+                item_top = bbox[1]
+                item_bottom = bbox[1] + bbox[3]
+                if item_bottom >= top and item_top <= bottom:
+                    if iid not in selected:
+                        selected.append(iid)
+            if selected:
+                tree.selection_set(*selected)
+            else:
+                tree.selection_remove(*tree.selection())
+            if tree is getattr(self, "tree", None):
+                # Ridisegna subito la barra sovrapposta: durante il
+                # trascinamento il solo after_idle lascerebbe intravedere
+                # lo sfondo precedente nella colonna PROGRESSO.
+                self._schedule_progress_overlay()
+                try:
+                    self._draw_progress_overlay()
+                except tk.TclError:
+                    pass
+            else:
+                self._schedule_progress_overlay()
+
+        def on_release(_event):
+            state["y"] = None
+            state["active"] = False
+            state["base"] = ()
+
+        tree.bind("<Button-1>", on_press, add="+")
+        tree.bind("<B1-Motion>", on_motion, add="+")
+        tree.bind("<ButtonRelease-1>", on_release, add="+")
 
     def _select_all_rows(self):
         iids = []
@@ -8511,21 +9950,6 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                 except (IndexError, TypeError, ValueError):
                     pass
         return [self.tasks_by_id[i] for i in ids if i in self.tasks_by_id]
-
-    def _apply_bulk_priority(self):
-        for task in self._checked_tasks(): self.manager.set_priority(task, self.bulk_priority_var.get())
-
-    def _bulk_pause(self, pause):
-        tasks = self._checked_tasks()
-        if pause:
-            tasks = [task for task in tasks if task.running or task.state == "In coda"]
-        else:
-            tasks = [task for task in tasks if task.state == "In pausa"]
-        self.manager.toggle_pause_group(tasks)
-
-    def _bulk_remove(self):
-        # Compatibility alias: all removal controls share selection semantics.
-        self._remove_selected()
 
     def _selected_removal_tasks(self):
         """Restituisce i task evidenziati, espandendo le righe di gruppo."""
@@ -8570,11 +9994,6 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
         self._update_empty_state()
         return True
 
-    def _bulk_start_now(self):
-        tasks = self._checked_tasks()
-        if tasks:
-            self.manager.start_many(tasks)
-
     def _double_click(self, event):
         row = self.tree.identify_row(event.y)
         if not row:
@@ -8589,7 +10008,9 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
     def _context(self, event):
         row = self.tree.identify_row(event.y)
         if row:
-            self.tree.selection_set(row)
+            if row not in self.tree.selection():
+                self.tree.selection_set(row)
+            self.tree.focus(row)
             task = self._selected()
             is_group = self.tree.item(row, "tags") in (("torrent_group",), ("import_group",))
             if task or is_group:
@@ -9143,7 +10564,9 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
     def _overlay_context(self, event):
         iid = self.tree.identify_row(self._overlay_tree_y(event))
         if iid:
-            self.tree.selection_set(iid)
+            if iid not in self.tree.selection():
+                self.tree.selection_set(iid)
+            self.tree.focus(iid)
             task = self._selected()
             is_group = self.tree.item(iid, "tags") in (("torrent_group",), ("import_group",))
             if task or is_group:
@@ -9318,6 +10741,16 @@ try { Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction 
                     _kind, check_name, check_url, check_result = event
                     self._finish_torrent_api_check(check_name, check_url,
                                                    check_result)
+                elif event[0] == "third_party_login_result":
+                    _kind, site_key, cookie_header, login_error = event
+                    self._finish_third_party_login(site_key, cookie_header,
+                                                   login_error)
+                elif event[0] == "gog_library_result":
+                    _kind, gog_games, gog_error = event
+                    self._finish_gog_library(gog_games, gog_error)
+                elif event[0] == "gog_downloads_result":
+                    _kind, gog_game_id, gog_rows, gog_error = event
+                    self._finish_gog_downloads(gog_game_id, gog_rows, gog_error)
                 elif event[0] == "torrent_file_ready":
                     _kind, path, name, error = event
                     status = getattr(self, "torrent_search_status", None)
@@ -9401,7 +10834,7 @@ def _run_selftest():
     import importlib
     _load_tkinter()
     for module_name in ("requests", "curl_cffi", "libtorrent", "pystray", "PIL.Image",
-                        "Crypto.Cipher.AES"):
+                        "Crypto.Cipher.AES", "browser_cookie3"):
         importlib.import_module(module_name)
     plain = _decrypt_privatebin_payload(_SELFTEST_PRIVATEBIN_PAYLOAD,
                                         _SELFTEST_PRIVATEBIN_KEY)
@@ -9427,6 +10860,7 @@ def main():
         except Exception:
             logging.exception("Selftest fallito")
             return 1
+    apply_startup_preference()
     try:
         _load_tkinter()
     except ImportError as exc:
