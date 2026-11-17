@@ -9,7 +9,7 @@ Dipendenze: solo libreria standard di Python. La logica di trasferimento è
 indipendente dalla GUI e comunica gli aggiornamenti tramite queue.Queue.
 """
 
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 
 import email.message
 import base64
@@ -1229,6 +1229,38 @@ ES_STRINGS["Avvia DOWNLOADVERSE all'avvio di Windows"] = (
 FR_STRINGS["Avvia DOWNLOADVERSE all'avvio di Windows"] = (
     "Démarrer DOWNLOADVERSE avec Windows")
 
+UI_STRINGS["Usa DNS alternativi (DoH) per aggirare i blocchi"] = (
+    "Use alternative DNS (DoH) to bypass blocks",
+    "Alternative DNS verwenden (DoH), um Sperren zu umgehen")
+ES_STRINGS["Usa DNS alternativi (DoH) per aggirare i blocchi"] = (
+    "Usar DNS alternativos (DoH) para evitar bloqueos")
+FR_STRINGS["Usa DNS alternativi (DoH) per aggirare i blocchi"] = (
+    "Utiliser des DNS alternatifs (DoH) pour contourner les blocages")
+
+UI_STRINGS[
+    "Risolve i nomi tramite Cloudflare, Google, Quad9, AdGuard "
+    "e DNS.SB, con passaggio automatico a un altro resolver se "
+    "uno non risponde."
+] = (
+    "Resolves names through Cloudflare, Google, Quad9, AdGuard and DNS.SB, "
+    "automatically switching to another resolver if one does not respond.",
+    "Löst Namen über Cloudflare, Google, Quad9, AdGuard und DNS.SB auf und "
+    "wechselt automatisch zu einem anderen Resolver, wenn einer nicht antwortet.")
+ES_STRINGS[
+    "Risolve i nomi tramite Cloudflare, Google, Quad9, AdGuard "
+    "e DNS.SB, con passaggio automatico a un altro resolver se "
+    "uno non risponde."
+] = (
+    "Resuelve los nombres mediante Cloudflare, Google, Quad9, AdGuard y "
+    "DNS.SB, cambiando automáticamente a otro resolver si uno no responde.")
+FR_STRINGS[
+    "Risolve i nomi tramite Cloudflare, Google, Quad9, AdGuard "
+    "e DNS.SB, con passaggio automatico a un altro resolver se "
+    "uno non risponde."
+] = (
+    "Résout les noms via Cloudflare, Google, Quad9, AdGuard et DNS.SB, avec "
+    "bascule automatique vers un autre résolveur si l'un ne répond pas.")
+
 UI_STRINGS["Cerca torrent"] = ("Search torrents", "Torrents suchen")
 ES_STRINGS["Cerca torrent"] = "Buscar torrents"
 FR_STRINGS["Cerca torrent"] = "Rechercher des torrents"
@@ -2207,6 +2239,58 @@ CLOUDFLARE_HELP = (
     "Verifica che il link sia accessibile dal browser e riprova più tardi."
 )
 
+# DNS-over-HTTPS: risolve i nomi tramite resolver pubblici, aggirando i DNS
+# dell'operatore che bloccano o dirottano i siti.
+DOH_PROVIDERS = (
+    ("Cloudflare", "https://1.1.1.1/dns-query"),
+    ("Google", "https://8.8.8.8/dns-query"),
+    ("Quad9", "https://9.9.9.9/dns-query"),
+    ("AdGuard", "https://94.140.14.14/dns-query"),
+    ("DNS.SB", "https://185.222.222.222/dns-query"),
+)
+_DOH_LOCK = threading.Lock()
+_doh_index = 0
+_dns_bypass_enabled = None
+
+
+def load_dns_bypass_config(path=LANGUAGE_CONFIG_PATH):
+    """True se il bypass DNS (DoH) è attivo; attivo di default."""
+    value = _read_app_config(path).get("dns_bypass")
+    return value if isinstance(value, bool) else True
+
+
+def save_dns_bypass_config(enabled, path=LANGUAGE_CONFIG_PATH):
+    _write_app_config({"dns_bypass": bool(enabled)}, path)
+
+
+def dns_bypass_enabled():
+    global _dns_bypass_enabled
+    if _dns_bypass_enabled is None:
+        _dns_bypass_enabled = load_dns_bypass_config()
+    return _dns_bypass_enabled
+
+
+def set_dns_bypass_enabled(enabled):
+    global _dns_bypass_enabled
+    _dns_bypass_enabled = bool(enabled)
+    try:
+        save_dns_bypass_config(enabled)
+    except OSError:
+        logging.exception("Impossibile salvare l'impostazione DNS")
+
+
+def current_doh_url():
+    with _DOH_LOCK:
+        return DOH_PROVIDERS[_doh_index][1]
+
+
+def rotate_doh_provider():
+    """Passa al resolver DoH successivo e ne restituisce l'URL."""
+    global _doh_index
+    with _DOH_LOCK:
+        _doh_index = (_doh_index + 1) % len(DOH_PROVIDERS)
+        return DOH_PROVIDERS[_doh_index][1]
+
 
 def load_browser_auth(path=None):
     """Legge in modo tollerante i cookie salvati localmente."""
@@ -2535,10 +2619,12 @@ def _put_cookie_header(session, host, cookie_header):
             continue
 
 
-def make_http_session(url, config_path=None, backend=None):
+def make_http_session(url, config_path=None, backend=None, doh_url=None):
     """Crea un client HTTP: curl_cffi/Chrome, cloudscraper o requests standard."""
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
     choices = [backend] if backend else ["curl", "cloudscraper", "requests"]
+    if doh_url is None and dns_bypass_enabled():
+        doh_url = current_doh_url()
     session = None
     for choice in choices:
         try:
@@ -2546,7 +2632,12 @@ def make_http_session(url, config_path=None, backend=None):
                 curl = _load_curl_cffi()
                 if curl is None:
                     continue
-                session = curl.Session(impersonate="chrome")
+                curl_kwargs = {"impersonate": "chrome"}
+                if doh_url:
+                    # libcurl risolve il nome tramite DNS-over-HTTPS (RFC 8484),
+                    # ignorando il resolver dell'operatore.
+                    curl_kwargs["doh_url"] = doh_url
+                session = curl.Session(**curl_kwargs)
             elif choice == "cloudscraper":
                 scraper = _load_cloudscraper()
                 if scraper is None:
@@ -2580,6 +2671,19 @@ def make_http_session(url, config_path=None, backend=None):
     return session
 
 
+def _is_dns_failure(exc):
+    """True se l'eccezione indica un problema di risoluzione DNS."""
+    if exc is None:
+        return False
+    if type(exc).__name__ == "DNSError":
+        return True
+    text = str(exc).lower()
+    return any(token in text for token in (
+        "could not resolve", "resolve host", "name resolution",
+        "name or service not known", "dns error", "dns query",
+    ))
+
+
 def _request_with_fallback(session, method, url, config_path=None, **kwargs):
     """Prova il client attivo e passa agli altri trasporti in caso di challenge/errore."""
     first_error = None
@@ -2592,6 +2696,35 @@ def _request_with_fallback(session, method, url, config_path=None, **kwargs):
     except Exception as exc:
         first_error = exc
     used = {type(session).__module__.split(".", 1)[0]}
+    if (first_error is not None and _is_dns_failure(first_error)
+            and dns_bypass_enabled()
+            and "curl_cffi" in type(session).__module__):
+        # Il resolver DoH corrente non risponde (o il nome non si risolve):
+        # prova automaticamente gli altri resolver pubblici.
+        for _ in range(len(DOH_PROVIDERS) - 1):
+            provider = rotate_doh_provider()
+            alternate = make_http_session(url, config_path, backend="curl",
+                                          doh_url=provider)
+            try:
+                alternate.headers.update(session.headers)
+                alternate.cookies.update(session.cookies)
+            except Exception:
+                pass
+            try:
+                candidate = getattr(alternate, method.lower())(url, **kwargs)
+                if not _looks_like_cloudflare(candidate, probe_body=probe_body):
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
+                    return candidate, alternate
+                candidate.close()
+            except Exception as exc:
+                first_error = first_error or exc
+            try:
+                alternate.close()
+            except Exception:
+                pass
     for backend in ("cloudscraper", "requests"):
         if backend == "cloudscraper" and _load_cloudscraper() is None:
             continue
@@ -2962,9 +3095,12 @@ def _buzzheavier_session(url):
     """Sessione curl_cffi con fingerprint accettato da Cloudflare su buzzheavier."""
     curl = _load_curl_cffi()
     if curl is not None:
+        session_kwargs = {}
+        if dns_bypass_enabled():
+            session_kwargs["doh_url"] = current_doh_url()
         for impersonation in ("chrome131", "chrome124", "chrome120", "safari17_0"):
             try:
-                return curl.Session(impersonate=impersonation)
+                return curl.Session(impersonate=impersonation, **session_kwargs)
             except Exception:
                 continue
     return make_http_session(url)
@@ -6763,6 +6899,27 @@ class DownloaderApp:
             self.settings_vars["connections"] = tk.IntVar(value=limits["connections_limit"])
             ttk.Spinbox(row,from_=1,to=1000,width=8,textvariable=self.settings_vars["connections"],
                         style="Settings.TSpinbox").pack(side="left")
+
+            self.settings_vars["dns_bypass"] = tk.BooleanVar(
+                value=dns_bypass_enabled())
+            tk.Checkbutton(
+                self.settings_content,
+                text=translate_ui(
+                    "Usa DNS alternativi (DoH) per aggirare i blocchi",
+                    self.language),
+                variable=self.settings_vars["dns_bypass"],
+                bg=self.BG, fg=self.TEXT, activebackground=self.BG,
+                activeforeground=self.TEXT, selectcolor=self.PANEL,
+                font=(APP_FONT_FAMILY, 10)).pack(anchor="w", pady=(16, 2))
+            tk.Label(
+                self.settings_content,
+                text=translate_ui(
+                    "Risolve i nomi tramite Cloudflare, Google, Quad9, AdGuard "
+                    "e DNS.SB, con passaggio automatico a un altro resolver se "
+                    "uno non risponde.",
+                    self.language),
+                bg=self.BG, fg=self.MUTED, wraplength=500, justify="left",
+                anchor="w", font=(APP_FONT_FAMILY, 9)).pack(anchor="w")
         if category not in ("Informazioni", "Torrent", "Login siti terzi"):
             ttk.Button(self.settings_content, text=translate_ui("Applica", self.language), command=self._apply_settings).pack(anchor="w", pady=(16, 0))
 
@@ -7212,6 +7369,9 @@ class DownloaderApp:
                 save_download_limits_config(down, up, peers)
                 self.manager.set_download_limits(down, up, peers)
                 self._save_settings_limit(self.settings_vars["concurrent"])
+                if "dns_bypass" in self.settings_vars:
+                    set_dns_bypass_enabled(
+                        bool(self.settings_vars["dns_bypass"].get()))
         except (ValueError, tk.TclError, OSError):
             logging.exception("Impossibile applicare le impostazioni")
             messagebox.showerror(translate_ui("Errore", self.language), translate_ui("Valore non valido nelle impostazioni.", self.language), parent=self.settings_window)
